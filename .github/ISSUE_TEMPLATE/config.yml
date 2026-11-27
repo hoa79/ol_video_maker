@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Hjälp att komma igång
+    url: https://github.com/hoa79/ol_video_maker/blob/main/docs/INSTALLERA.md
+    about: Läs installationsguiden först. Den svarar på de vanligaste frågorna.

@@ -1,0 +1,118 @@
+# Bygger Windows-paketet (exe + ffmpeg + guide) som går att skicka till kompisar.
+# - Varje PR och "Run workflow" under fliken Actions: paketet laddas upp som artifact (för test).
+# - En tagg v* (till exempel v0.2.0): paketet och ffmpegs källkod publiceras som GitHub Release.
+name: Bygg Windows-paket
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python från python.org: alla dess .exe/.dll/.pyd är signerade av Python Software
+      # Foundation. Den portabla versionen skickar med just de filerna.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installera byggverktyg
+        run: python -m pip install markdown==3.7
+
+      - name: Bygg paketet
+        env:
+          # En release får bara byggas med fastlåsta kontrollsummor.
+          REQUIRE_PINNED: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
+          VERSION: ${{ github.ref_name }}
+        run: python packaging/build_windows.py --version "$env:VERSION"
+
+      - name: Röktest (ffmpeg och licenser finns i paketet)
+        shell: pwsh
+        run: |
+          $app = "build_win/paket/OL Video Maker"
+          & "$app/ffmpeg/ffmpeg.exe" -hide_banner -version | Select-Object -First 1
+          foreach ($f in "licenser/Python_LICENSE.txt", "licenser/Tcl_license.txt", "licenser/Tk_license.txt", "ffmpeg/KALLKOD.txt", "Guide.html") {
+            if (-not (Test-Path "$app/$f")) { throw "Saknas: $f" }
+          }
+          # Alla program- och biblioteksfiler utom ffmpeg ska ha en giltig signatur
+          # (annars spärrar Smart appkontroll dem).
+          $files = Get-ChildItem -Path $app -Recurse -Include *.exe, *.dll, *.pyd |
+            Where-Object { $_.FullName -notlike "*\ffmpeg\*" }
+          $bad = $files | Get-AuthenticodeSignature | Where-Object { $_.Status -ne "Valid" }
+          "Signerade filer: $($files.Count)"
+          $files | Get-AuthenticodeSignature | ForEach-Object { $_.SignerCertificate.Subject } | Sort-Object -Unique
+          if ($bad) { $bad | Format-Table Path, Status -AutoSize | Out-String -Width 300; throw "Osignerade filer i paketet" }
+          # Självtest med själva exe-filen: fönsterbiblioteket, ffmpeg och guiden ska hittas.
+          $code = "import sys; sys.olvm_portable = True; from ol_video_maker.__main__ import _selftest; sys.exit(_selftest())"
+          $p = Start-Process -FilePath "$app/OL Video Maker.exe" -ArgumentList "-c", "`"$code`"" -Wait -PassThru
+          Get-Content "$env:TEMP/ol_video_maker_selftest.txt"
+          if ($p.ExitCode -ne 0) { throw "Självtestet misslyckades ($($p.ExitCode))" }
+          # Dubbelklick (inga argument) ska öppna fönstret och låta det vara öppet.
+          $g = Start-Process -FilePath "$app/OL Video Maker.exe" -PassThru
+          Start-Sleep -Seconds 8
+          if ($g.HasExited) { Get-Content "$env:TEMP/ol_video_maker_fel.txt" -ErrorAction SilentlyContinue; throw "Fönstret startade inte (avslutades med $($g.ExitCode))" }
+          "Fönstret är öppet (process $($g.Id))"
+          Stop-Process -Id $g.Id -Force
+
+      - name: Ladda upp paketet (för test)
+        uses: actions/upload-artifact@v4
+        with:
+          name: OL_Video_Maker_windows
+          path: build_win/paket/
+          retention-days: 30
+
+      - name: Ladda upp ffmpegs källkod (för test)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg_kallkod
+          path: build_win/ffmpeg-*.tar.xz
+          compression-level: 0
+          retention-days: 30
+
+      - name: Spara filerna till releasen
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-filer
+          path: |
+            build_win/OL_Video_Maker_*_windows.zip
+            build_win/ffmpeg-*.tar.xz
+          compression-level: 0
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-filer
+          path: release
+      - name: Skapa GitHub Release med zip-filen och ffmpegs källkod
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # Releasen kan redan finnas om den skapades på GitHubs webbsida (då skapas taggen samtidigt).
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
+            # Lägg till instruktionerna om releasen saknar text.
+            if [ -z "$(gh release view "$TAG" --json body --jq .body)" ]; then
+              gh release edit "$TAG" --notes-file packaging/release_notes.md
+            fi
+          else
+            gh release create "$TAG" release/* \
+              --title "OL Video Maker $TAG" \
+              --notes-file packaging/release_notes.md
+          fi

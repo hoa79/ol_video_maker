@@ -1,0 +1,30 @@
+name: Förslag på förbättring
+description: Har du en idé som gör programmet bättre eller enklare?
+title: "Förslag: "
+labels: ["förslag"]
+body:
+  - type: markdown
+    attributes:
+      value: Alla förslag läses. Allt här syns för alla, så skriv inga personuppgifter.
+  - type: textarea
+    id: problem
+    attributes:
+      label: 1. Vad är krångligt eller saknas i dag?
+    validations:
+      required: true
+  - type: textarea
+    id: ide
+    attributes:
+      label: 2. Hur skulle du vilja att det fungerade?
+    validations:
+      required: true
+  - type: dropdown
+    id: del
+    attributes:
+      label: 3. Vilken del gäller det?
+      options: ["Steg 1 Välj filmer", "Steg 2 Synka", "Steg 3 Målgång", "Steg 4 Provbit", "Steg 5 Skapa videon", "Puls", "Livelox-inspelning", "Installation", "Guiden/texterna", "Annat"]
+  - type: textarea
+    id: ovrigt
+    attributes:
+      label: 4. Något mer? (frivilligt)
+      description: En skiss eller ett exempel hjälper.

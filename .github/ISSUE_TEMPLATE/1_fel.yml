@@ -1,0 +1,51 @@
+name: Något fungerar inte
+description: Berätta om ett fel i programmet.
+title: "Fel: "
+labels: ["fel"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tack för att du hjälper till! Skriv så enkelt du kan.
+        **Lägg inte upp dina filmer, din .fit-fil eller skärmbilder med andras namn.** Allt här syns för alla.
+  - type: textarea
+    id: vad
+    attributes:
+      label: 1. Vad hände?
+      placeholder: "Till exempel: Programmet stängdes när jag tryckte på Skapa videon."
+    validations:
+      required: true
+  - type: textarea
+    id: steg
+    attributes:
+      label: 2. Vad gjorde du precis innan?
+      description: Skriv stegen i ordning, 1, 2, 3.
+      placeholder: |
+        1. Valde två GoPro-filer i steg 1
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: forvantat
+    attributes:
+      label: 3. Vad trodde du skulle hända?
+  - type: input
+    id: version
+    attributes:
+      label: 4. Vilken version har du?
+      description: Står i namnet på zip-filen, till exempel v0.3.0-beta.
+  - type: dropdown
+    id: windows
+    attributes:
+      label: 5. Vilket Windows har du?
+      options: ["Windows 11", "Windows 10", "Vet inte", "Annat"]
+  - type: input
+    id: kamera
+    attributes:
+      label: 6. Vilken headcam/kamera?
+      placeholder: "Till exempel GoPro MAX"
+  - type: textarea
+    id: bild
+    attributes:
+      label: 7. Skärmbild av felmeddelandet (frivilligt)
+      description: Dra in bilden här. Kontrollera först att inga namn eller sökvägar med ditt namn syns.

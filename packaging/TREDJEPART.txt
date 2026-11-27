@@ -1,0 +1,36 @@
+Program från andra som följer med OL Video Maker
+=================================================
+
+OL Video Maker är licensierat under MIT (se LICENS.txt). Paketet innehåller också
+följande fria program. Alla är gratis att använda och dela vidare.
+
+1. ffmpeg och ffprobe (mappen ffmpeg)
+   Licens: GNU General Public License version 3 (se ffmpeg/LICENSE.txt).
+   Build: ffmpeg 7.1 "essentials" från www.gyan.dev.
+   Källkod: delas ut bredvid zip-filen (ffmpeg-7.1.tar.xz), se ffmpeg/KALLKOD.txt
+   och ffmpeg/README.txt.
+   OL Video Maker startar ffmpeg som ett fristående program.
+
+2. Python 3.12 från python.org ("OL Video Maker.exe", *.dll och mapparna DLLs och Lib)
+   Licens: Python Software Foundation License, se licenser/Python_LICENSE.txt.
+   Filen innehåller också licenserna för biblioteken som följer med Python,
+   till exempel OpenSSL, libffi, zlib och expat.
+   Ändringar: Filerna är oförändrade, men pythonw.exe har bytt namn till
+   "OL Video Maker.exe", vissa delar av standardbiblioteket som programmet inte
+   använder (test, idlelib, ensurepip m.fl.) har tagits bort, och filerna
+   python312._pth och app/sitecustomize.py startar programmet.
+
+   "OL Video Maker.exe" är Pythons egen programfil, signerad av Python Software
+   Foundation. Python Software Foundation har inget med OL Video Maker att göra
+   och har inte godkänt programmet. "Python" och Python-logotypen är varumärken
+   som tillhör Python Software Foundation.
+
+3. Tcl/Tk (filväljarna, mappen tcl)
+   Licens: BSD-liknande Tcl/Tk-licens, se licenser/Tcl_license.txt och
+   licenser/Tk_license.txt.
+
+Fönstret visas med Microsoft Edge, som redan finns i Windows. Edge följer inte med
+paketet; OL Video Maker startar bara den Edge som finns på datorn.
+
+Kartor och GPS-spår i dina videor kommer från Livelox (livelox.com). Ange alltid
+Livelox som källa när du delar en video. Kartan ägs av tävlingsarrangören.

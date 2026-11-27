@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+/ffmpeg/
+*.mp4
+*.MP4
+!docs/*.mp4
+build_win/

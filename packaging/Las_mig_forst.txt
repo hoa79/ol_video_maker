@@ -1,0 +1,32 @@
+OL Video Maker {version} (beta)
+================================
+
+Gör en YouTube-video av din headcam-film och din Livelox-inspelning.
+Allt körs på din egen dator. Inget laddas upp.
+
+Kom igång
+---------
+1. Packa upp zip-filen: högerklicka på den, välj "Extrahera alla" och klicka på "Extrahera".
+   (Programmet fungerar inte om du startar det direkt inifrån zip-filen.)
+2. Öppna den uppackade mappen "OL Video Maker".
+3. Dubbelklicka på "OL Video Maker.exe".
+4. Visar Windows en blå ruta med texten "Windows skyddade datorn"?
+   Klicka på "Mer information" och sedan på "Kör ändå".
+   Rutan visas för att programmet är nytt och inte har en köpt digital signatur.
+   Det behöver du bara göra första gången.
+5. Första gången visas programmets villkor. Läs dem, kryssa i rutan och klicka på
+   "Godkänn och fortsätt". (Villkoren finns också i "Villkor.html".)
+6. Följ stegen 1 till 5 i programmet.
+
+Hjälp
+-----
+Krånglar installationen? Öppna "Installationsguide.html" i den här mappen.
+Öppna "Guide.html" i den här mappen. Där står hur du spelar in Livelox på skärmen
+och hur du gör din video, steg för steg.
+
+Tips: Högerklicka på "OL Video Maker.exe" och välj "Skicka till" > "Skrivbord
+(skapa genväg)" så får du programmet på skrivbordet.
+
+Licenser
+--------
+Se LICENS.txt och TREDJEPART.txt.

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="170" viewBox="0 0 300 170" font-family="Segoe UI,DejaVu Sans,sans-serif">
+ <rect x="1" y="1" width="298" height="168" rx="6" fill="#f4efdf" stroke="#7d7562"/>
+ <rect x="1" y="1" width="298" height="14" rx="6" fill="#d9d2bd"/>
+ <g fill="none" stroke="#c9822b" stroke-opacity=".45" stroke-width="1.2">
+  <path d="M10 60 C60 30 90 80 150 50 S250 20 295 40"/><path d="M5 100 C70 70 110 120 170 90 S260 70 295 85"/>
+  <path d="M5 140 C80 110 120 160 190 130 S270 120 295 125"/></g>
+ <g fill="#c8e6b8" opacity=".6"><ellipse cx="80" cy="120" rx="40" ry="18"/><ellipse cx="230" cy="60" rx="35" ry="16"/></g>
+ <path d="M150 150 L138 130 L162 130Z" fill="none" stroke="#b0127f" stroke-width="2"/>
+ <circle cx="158" cy="40" r="8" fill="none" stroke="#b0127f" stroke-width="2"/>
+ <path d="M150 128 L157 49" stroke="#b0127f" stroke-width="1.5"/>
+ <text x="166" y="38" font-size="10" fill="#b0127f" font-weight="700">1</text>
+ <rect x="118" y="19" width="78" height="146" fill="rgba(176,18,127,.06)" stroke="#ff2fb0" stroke-width="2.5" stroke-dasharray="6 4"/>
+ <text x="8" y="150" font-size="12" font-weight="700" fill="#2a2a22">640 × 1080</text>
+ <text x="8" y="164" font-size="10" fill="#7d7562">bredd × höjd (pixlar)</text>
+</svg>

@@ -1,0 +1,22 @@
+name: Fel i guiden eller texterna
+description: Något i instruktionerna stämmer inte eller är svårt att förstå.
+title: "Text: "
+labels: ["dokumentation"]
+body:
+  - type: input
+    id: var
+    attributes:
+      label: 1. Var står det?
+      placeholder: "Till exempel: Guiden, del B, steg 5"
+    validations:
+      required: true
+  - type: textarea
+    id: fel
+    attributes:
+      label: 2. Vad är fel eller svårt?
+    validations:
+      required: true
+  - type: textarea
+    id: forslag
+    attributes:
+      label: 3. Hur borde det stå? (frivilligt)
