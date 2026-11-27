@@ -6,6 +6,18 @@ Livelox-kartan visas i en egen kolumn till höger, så kartan täcker aldrig hea
 
 Allt körs på din egen dator. Den färdiga videon är 1920x1080, H.264 och AAC, som passar YouTube.
 
+![Så blir videon: headcam-filmen till vänster, kartan med vägvalet till höger och pulsen som ett band nederst](docs/bilder/video.jpg)
+
+## Så ser programmet ut
+
+Programmet är en guide i fem steg. Bilderna visar en påhittad demofilm, karta och puls.
+
+| | |
+|---|---|
+| **1. Välj filmer** och, om du vill, pulsfilen från klockan<br>![Steg 1: välj filmer](docs/bilder/steg1_valj_filmer.jpg) | **2. Synka starten:** visa var starten är i båda filmerna<br>![Steg 2: synka starten](docs/bilder/steg2_synka_starten.jpg) |
+| **2. Synka pulsen:** programmet föreslår var loppet startar<br>![Steg 2: synka pulsen](docs/bilder/steg2_synka_pulsen.jpg) | **3. Välj målgång:** var videon ska sluta<br>![Steg 3: välj målgång](docs/bilder/steg3_malgang.jpg) |
+| **4. Titta på provbit:** kolla att kartan följer med<br>![Steg 4: provbit](docs/bilder/steg4_provbit.jpg) | **5. Skapa videon:** välj Full HD eller 4K och tryck på knappen<br>![Steg 5: klart](docs/bilder/steg5_klar.jpg) |
+
 👉 **Ny användare? Börja med [installationsguiden](docs/INSTALLERA.md).**
 Sedan visar [steg-för-steg-guiden](docs/GUIDE.md) hur du spelar in Livelox och gör din video.
 Programmets villkor finns i [VILLKOR.md](docs/VILLKOR.md).
