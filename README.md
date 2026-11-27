@@ -11,6 +11,7 @@ Allt körs på din egen dator. Den färdiga videon är 1920x1080, H.264 och AAC,
 ## Så ser programmet ut
 
 Programmet är en guide i fem steg. Bilderna visar en påhittad demofilm, karta och puls.
+Texten "Karta: Livelox" visar var källan anges i en riktig video.
 
 | | |
 |---|---|
@@ -79,3 +80,5 @@ Windows-paketet skickar med ffmpeg 7.1 från gyan.dev (GPL v3) i mappen `ffmpeg/
 ffmpegs licenstext, README (med byggkonfiguration) och `KALLKOD.txt`. ffmpegs källkod läggs
 bredvid zip-filen i varje GitHub Release. Licenstexterna för Python och Tcl/Tk ligger i
 `licenser/`, och alla komponenter listas i `TREDJEPART.txt`. Se [ffmpeg.org/legal.html](https://ffmpeg.org/legal.html).
+
+OL Video Maker är inte kopplat till eller godkänt av Livelox.
