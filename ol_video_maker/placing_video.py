@@ -306,20 +306,12 @@ def figure_frames(kind: str, k: int, folder: str) -> Tuple[str, int, int]:
 # ---------------------------------------------------------------------------
 
 
-def _clock(t: float) -> str:
-    t = int(max(0, t))
-    h, r = divmod(t, 3600)
-    m, s = divmod(r, 60)
-    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
-
-
 class Scene:
     """Räknar ut vad som ska ritas. Kommer ihåg var etiketterna stod förra gången, så att de
     inte hoppar mellan raderna i onödan."""
 
-    def __init__(self, track: PlacingTrack, box_w: int, legend: str = "A") -> None:
+    def __init__(self, track: PlacingTrack, box_w: int) -> None:
         self.track = track
-        self.legend = legend
         sp = track.splits
         self.me = track.me if track.me is not None and track.me < len(sp.runners) else None
         self.shown = [i for i in dict.fromkeys(track.shown + ([self.me] if self.me is not None
@@ -387,7 +379,7 @@ class Scene:
                 if small:
                     items.append(Item("vid", 3, Text(30, 1011, [(small, WHITE, False)], 20,
                                                      outline=0, alpha=0.8 * m.visible)))
-                if abs(m.trend) >= TREND_LIMIT and self.legend != "B":
+                if abs(m.trend) >= TREND_LIMIT:
                     up = m.trend > 0
                     items.append(Item("trend", 3, Text(
                         30, 1041, [(f"{'▲' if up else '▼'} {abs(m.trend)} på sträckan",
@@ -434,19 +426,13 @@ class Scene:
         """Teckenförklaringen för figurerna (där lopptiden stod förut). Figurerna står still
         här och är mindre än på linjen."""
         s = 0.5
-        if self.legend == "B":
-            rows = [("fast", "tar 3+ plac.", y - 24), ("tired", "tappar 3+ plac.", y)]
-        else:
-            rows = [("fast", "snabb", y), ("tired", "trött", y)]
         out: List[Item] = []
-        cx = x + FIG_R * s
-        for j, (kind, label, yy) in enumerate(rows):
-            if self.legend != "B" and j == 1:
-                cx = x + 88 + FIG_R * s
-            for k_, sh in enumerate(place_shapes(figure_shapes(kind, 3), cx, yy, s)):
+        for j, (kind, label) in enumerate((("fast", "snabb"), ("tired", "trött"))):
+            cx = x + 88 * j + FIG_R * s
+            for k_, sh in enumerate(place_shapes(figure_shapes(kind, 3), cx, y, s)):
                 out.append(Item(f"forkl_{kind}{k_}", 3, sh))
             out.append(Item(f"forkl_{kind}_text", 3,
-                            Text(cx + FIG_R * s + 6, yy, [(label, WHITE, False)], 15,
+                            Text(cx + FIG_R * s + 6, y, [(label, WHITE, False)], 15,
                                  outline=0, alpha=0.75)))
         return out
 

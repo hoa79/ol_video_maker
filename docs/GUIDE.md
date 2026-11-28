@@ -200,7 +200,9 @@ Du kan alltid klicka på **Tillbaka** och ändra.
    Med placering visas en linje från start till mål med kontrollerna. Du och de du valde är
    prickar på linjen, där ni var vid samma lopptid. Siffran vid namnet är placeringen vid
    senaste kontrollen. En grön springande figur vinner minst 3 placeringar på sträckan, en
-   orange trött figur tappar minst 3.
+   orange trött figur tappar minst 3. Längst ner till vänster förklaras figurerna (snabb och
+   trött). Alla tider på linjen kommer från sträcktiderna i Livelox. Markera målgången i
+   steg 3, så står du i mål på linjen precis när du går i mål i filmen.
 8. Ladda upp videon på YouTube. Programmet skriver **Karta: Livelox** längst ner i kartkolumnen
    (**Karta och sträcktider: Livelox** när placeringen visas).
    Skriv också i beskrivningen var kartan kommer från, till exempel:
