@@ -1,7 +1,7 @@
 """Höjd och fart i videon (skiss D, vald av användaren 2026-11-28).
 
 Under headcam-bilden, i samma svarta fält som pulsbandet, visas loppets höjdprofil. Ytan under
-kurvan färgas efter farten, som på Strava: en jämn skala från blå (långsamt) via cyan, grön, gul
+kurvan färgas efter farten: en jämn skala från blå (långsamt) via cyan, grön, gul
 och orange till röd (snabbt). Skalan räknas på loppets egen fart, så färgerna sprids även för
 den som springer långsamt. Det man har sprungit är färgat, det som är kvar är grått.
 
