@@ -132,9 +132,13 @@ Du kan alltid klicka på **Tillbaka** och ändra.
    2. Klicka på **Välj Livelox-inspelning…** och välj filen du spelade in (Del B).
       Har du inte spelat in än? Klicka på länken **Hur spelar jag in Livelox?** i programmet.
    3. **Under videon (frivilligt):** Fältet under headcam-bilden räcker till en sak. Välj
-      **Ingenting**, **Puls** eller **Placering**.
+      **Ingenting**, **Puls**, **Höjd och fart** eller **Placering**.
       - **Puls:** Klicka på **Välj pulsfil…** och välj filen från klockan (se **Hämta
         pulsfilen från Garmin** nedan). Du kan välja zip-filen direkt.
+      - **Höjd och fart:** Välj samma fil från klockan som för pulsen. Videon visar
+        höjdkurvan, färgad efter farten: blå när det går långsamt, röd när det går snabbt.
+        En liten löpare springer längs kurvan, fortare ju snabbare du springer. Klockan
+        behöver ha haft GPS på under loppet.
       - **Placering:** Du klistrar in sträcktiderna från Livelox på nästa sida (se
         **Visa placeringen under loppet** nedan).
    4. Klicka på **Nästa**.
@@ -150,7 +154,7 @@ Du kan alltid klicka på **Tillbaka** och ändra.
    5. Gör samma sak i Livelox-bilden: leta upp ögonblicket när din prick börjar röra sig och
       klicka på **Starten är här**.
    6. Klicka på **Nästa**.
-   7. **Synka pulsen** (bara om du valde en pulsfil): Klockan vet inte var filmen börjar, så
+   7. **Synka pulsen** (bara om du valde **Puls** eller **Höjd och fart**): Klockan vet inte var filmen börjar, så
       du visar programmet var loppet startar i pulsen.
       1. Programmet har redan flyttat den lila linjen dit pulsen börjar stiga brant. Till
          höger ser du headcam-bilden från starten du markerade.

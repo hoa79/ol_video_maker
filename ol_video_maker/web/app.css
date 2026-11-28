@@ -134,6 +134,9 @@ input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var(-
 .pulsemid h2{font-size:17px;margin:0}
 .facts{font-size:13.5px;color:var(--muted);display:flex;gap:26px}
 .facts b{color:var(--text)}
+.tprofile{margin:8px 0 2px;line-height:0;max-width:520px}
+.tprofile svg{width:100%;height:34px;display:block}
+.tprofile[hidden]{display:none}
 .pulsecard .big{width:auto;margin:0;padding:10px 20px;font-size:15px}
 
 /* ---------- puls ---------- */

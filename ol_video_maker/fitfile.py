@@ -1,7 +1,8 @@
-"""Läs pulsen ur en .fit-fil från en Garmin-klocka (eller annan klocka som sparar FIT).
+"""Läs pulsen, höjden och farten ur en .fit-fil från en Garmin-klocka (eller annan klocka som
+sparar FIT).
 
-FIT är Garmins binärformat med en publicerad beskrivning. Vi läser bara det vi behöver: tid och puls i
-"record"-meddelandena. Läsaren är skriven här med bara Pythons standardbibliotek,
+FIT är Garmins binärformat med en publicerad beskrivning. Vi läser bara det vi behöver: tid, puls,
+höjd och fart i "record"-meddelandena. Läsaren är skriven här med bara Pythons standardbibliotek,
 så inget extra bibliotek (och ingen extra licens) behövs.
 
 Formatet i korthet:
@@ -29,6 +30,11 @@ FIT_EPOCH = 631065600     # 1989-12-31 00:00:00 UTC i Unix-tid
 MSG_RECORD = 20           # "record": ett mätvärde per sekund (puls, fart, position …)
 FIELD_TIMESTAMP = 253
 FIELD_HEART_RATE = 3
+FIELD_ALTITUDE = 2            # uint16, (värde / 5) - 500 meter
+FIELD_SPEED = 6               # uint16, värde / 1000 m/s
+FIELD_ENH_ALTITUDE = 78       # uint32, samma skala som altitude men större omfång
+FIELD_ENH_SPEED = 73          # uint32, värde / 1000 m/s
+_WANTED = (FIELD_HEART_RATE, FIELD_ALTITUDE, FIELD_SPEED, FIELD_ENH_ALTITUDE, FIELD_ENH_SPEED)
 
 # Bastyp (de 5 låga bitarna) -> (struct-tecken, storlek, ogiltigt värde)
 _BASE_TYPES = {
@@ -68,9 +74,34 @@ def _read_int(data: bytes, pos: int, size: int, base: int, endian: str) -> Optio
     return None if value == invalid else value
 
 
-def read_heart_rate(data: bytes, name: str = "filen") -> List[Tuple[int, int]]:
-    """[(Unix-tid i sekunder, puls)] ur FIT-data, sorterat på tid."""
-    out: List[Tuple[int, int]] = []
+@dataclass
+class Sample:
+    """Ett mätvärde från klockan. None = klockan mätte inte det värdet."""
+    t: int                       # Unix-tid i sekunder
+    hr: Optional[int] = None     # slag/min
+    alt: Optional[float] = None  # meter över havet
+    speed: Optional[float] = None  # m/s
+
+
+def _sample(d: "_Def", data: bytes, p: int, ts: int) -> Sample:
+    vals: Dict[int, int] = {}
+    q = p
+    for num, size, base in d.fields:
+        if num in _WANTED:
+            v = _read_int(data, q, size, base, d.endian)
+            if v is not None:
+                vals[num] = v
+        q += size
+    alt = vals.get(FIELD_ENH_ALTITUDE, vals.get(FIELD_ALTITUDE))
+    speed = vals.get(FIELD_ENH_SPEED, vals.get(FIELD_SPEED))
+    return Sample(ts + FIT_EPOCH, vals.get(FIELD_HEART_RATE) or None,
+                  None if alt is None else alt / 5.0 - 500.0,
+                  None if speed is None else speed / 1000.0)
+
+
+def read_samples(data: bytes, name: str = "filen") -> List[Sample]:
+    """Alla mätvärden (record-meddelanden) ur FIT-data, sorterade på tid."""
+    out: List[Sample] = []
     pos = 0
     files = 0
     while pos + 12 <= len(data):
@@ -97,15 +128,11 @@ def read_heart_rate(data: bytes, name: str = "filen") -> List[Tuple[int, int]]:
                     if last_ts is not None:
                         last_ts += (offset - (last_ts & 0x1F)) & 0x1F
                     ts = last_ts
-                    hr = None
-                    q = p
-                    for num, size, base in d.fields:
-                        if d.global_num == MSG_RECORD and num == FIELD_HEART_RATE:
-                            hr = _read_int(data, q, size, base, d.endian)
-                        q += size
+                    if p + d.size > end:
+                        break
+                    if d.global_num == MSG_RECORD and ts is not None:
+                        out.append(_sample(d, data, p, ts))
                     p += d.size
-                    if d.global_num == MSG_RECORD and ts is not None and hr:
-                        out.append((ts + FIT_EPOCH, hr))
                     continue
                 local = h & 0x0F
                 if h & 0x40:  # definition
@@ -133,31 +160,34 @@ def read_heart_rate(data: bytes, name: str = "filen") -> List[Tuple[int, int]]:
                     raise ValueError("odefinierat meddelande")
                 if p + d.size > end:
                     break  # avklippt fil: använd det vi har
-                ts = hr = None
+                ts = None
                 q = p
                 for num, size, base in d.fields:
                     if num == FIELD_TIMESTAMP:
                         ts = _read_int(data, q, size, base, d.endian)
-                    elif d.global_num == MSG_RECORD and num == FIELD_HEART_RATE:
-                        hr = _read_int(data, q, size, base, d.endian)
                     q += size
-                p += d.size
                 if ts is not None:
                     last_ts = ts
-                if d.global_num == MSG_RECORD and ts is not None and hr:
-                    out.append((ts + FIT_EPOCH, hr))
+                if d.global_num == MSG_RECORD and ts is not None:
+                    out.append(_sample(d, data, p, ts))
+                p += d.size
         except (IndexError, ValueError, struct.error):
             if not out:
                 raise VideoMakerError(BAD_FILE.format(name=name))
         files += 1
         pos = pos + hsize + data_size + 2
-    out.sort()
+    out.sort(key=lambda smp: smp.t)   # stabil: vid samma sekund står den första först
     # Samma sekund två gånger (t.ex. två ihopslagna filer): behåll den första.
-    uniq: List[Tuple[int, int]] = []
-    for t, v in out:
-        if not uniq or t != uniq[-1][0]:
-            uniq.append((t, v))
+    uniq: List[Sample] = []
+    for smp in out:
+        if not uniq or smp.t != uniq[-1].t:
+            uniq.append(smp)
     return uniq
+
+
+def read_heart_rate(data: bytes, name: str = "filen") -> List[Tuple[int, int]]:
+    """[(Unix-tid i sekunder, puls)] ur FIT-data, sorterat på tid."""
+    return [(smp.t, smp.hr) for smp in read_samples(data, name) if smp.hr]
 
 
 # ---------------------------------------------------------------------------
@@ -165,12 +195,85 @@ def read_heart_rate(data: bytes, name: str = "filen") -> List[Tuple[int, int]]:
 # ---------------------------------------------------------------------------
 
 
+def _smooth(vals: List[float], times: List[float], half: float) -> List[float]:
+    """Glidande medelvärde över ±half sekunder (GPS-farten hoppar mycket från sekund till
+    sekund)."""
+    out: List[float] = []
+    pre = [0.0]
+    for v in vals:
+        pre.append(pre[-1] + v)
+    a = b = 0
+    for i, t in enumerate(times):
+        while times[a] < t - half:
+            a += 1
+        while b < len(times) and times[b] <= t + half:
+            b += 1
+        out.append((pre[b] - pre[a]) / max(1, b - a))
+    return out
+
+
+@dataclass
+class Terrain:
+    """Höjd (meter över havet) och fart (m/s) från klockan, utjämnade."""
+    times: List[float]
+    alt: List[float]
+    speed: List[float]
+
+    @classmethod
+    def from_samples(cls, samples: Sequence[Sample]) -> Optional["Terrain"]:
+        rows = [(float(smp.t), smp.alt, smp.speed) for smp in samples
+                if smp.alt is not None and smp.speed is not None]
+        if len(rows) < 10:
+            return None
+        times = [r[0] for r in rows]
+        return cls(times, _smooth([r[1] for r in rows], times, 5.0),
+                   _smooth([max(0.0, r[2]) for r in rows], times, 15.0))
+
+    def at(self, t: float) -> Optional[Tuple[float, float]]:
+        """(höjd, fart) vid tiden t, linjärt mellan mätvärdena. None utanför mätningen eller i
+        långa glapp (klockan pausad)."""
+        ts = self.times
+        if not ts or t < ts[0] or t > ts[-1]:
+            return None
+        i = bisect.bisect_right(ts, t)
+        if i >= len(ts):
+            return self.alt[-1], self.speed[-1]
+        t0, t1 = ts[i - 1], ts[i]
+        if t1 - t0 > 60:
+            return None
+        f = (t - t0) / (t1 - t0) if t1 > t0 else 0.0
+        return (self.alt[i - 1] + f * (self.alt[i] - self.alt[i - 1]),
+                self.speed[i - 1] + f * (self.speed[i] - self.speed[i - 1]))
+
+    def window(self, t0: float, t1: float) -> Optional[Tuple[float, float, float, float]]:
+        """(lägsta höjd, högsta höjd, långsam fart, snabb fart) mellan t0 och t1. Farten tas
+        som 5:e och 95:e percentilen, så att stopp vid kontrollerna och enstaka GPS-hopp inte
+        tar hela färgskalan."""
+        i, j = bisect.bisect_left(self.times, t0), bisect.bisect_right(self.times, t1)
+        if j - i < 2:
+            return None
+        alts = self.alt[i:j]
+        sp = sorted(self.speed[i:j])
+        lo, hi = sp[int(0.05 * (len(sp) - 1))], sp[int(0.95 * (len(sp) - 1))]
+        return min(alts), max(alts), lo, hi
+
+
+def pace_text(speed: Optional[float]) -> str:
+    """Fart som minuter per kilometer, t.ex. 5:18. Står man nästan still: –."""
+    if speed is None or speed < 1000 / (60 * 30):   # långsammare än 30 min/km
+        return "–"
+    sec = int(round(1000 / speed))
+    return f"{sec // 60}:{sec % 60:02d}"
+
+
 @dataclass
 class HeartRate:
-    """Pulsen från klockan: tider (Unix-sekunder) och slag per minut."""
+    """Pulsen från klockan: tider (Unix-sekunder) och slag per minut. terrain: höjd och fart
+    från samma fil, om klockan mätte dem."""
     times: List[float]
     bpm: List[int]
     name: str = ""
+    terrain: Optional[Terrain] = None
 
     @property
     def start(self) -> float:
@@ -274,21 +377,30 @@ def load_fit(path: str) -> HeartRate:
                 data = f.read()
     except (OSError, zipfile.BadZipFile):
         raise VideoMakerError(f"Kunde inte öppna filen {name}.")
-    samples = read_heart_rate(data, name)
+    all_samples = read_samples(data, name)
+    samples = [(smp.t, smp.hr) for smp in all_samples if smp.hr]
     if len(samples) < 10:
         raise VideoMakerError(
             f"Filen {name} innehåller ingen puls. Hade du pulsmätningen på under loppet?")
-    return HeartRate([float(t) for t, _ in samples], [v for _, v in samples], name)
+    return HeartRate([float(t) for t, _ in samples], [v for _, v in samples], name,
+                     Terrain.from_samples(all_samples))
 
 
-def write_fit(path: str, samples: Sequence[Tuple[float, int]]) -> None:
-    """Skriv en enkel FIT-fil med puls (används i testerna)."""
+def write_fit(path: str, samples: Sequence[Tuple[float, int]],
+              terrain: Optional[Sequence[Tuple[float, float]]] = None) -> None:
+    """Skriv en enkel FIT-fil med puls (används i testerna). terrain: (höjd i m, fart i m/s)
+    för varje mätvärde, skrivs som enhanced_altitude och enhanced_speed."""
     body = bytearray()
     # Definition: lokalt meddelande 0 = record med timestamp (uint32) och heart_rate (uint8).
-    body += bytes([0x40, 0, 0]) + struct.pack("<H", MSG_RECORD) + bytes([2])
+    body += bytes([0x40, 0, 0]) + struct.pack("<H", MSG_RECORD) + bytes([4 if terrain else 2])
     body += bytes([FIELD_TIMESTAMP, 4, 0x86, FIELD_HEART_RATE, 1, 0x02])
-    for t, hr in samples:
+    if terrain:
+        body += bytes([FIELD_ENH_ALTITUDE, 4, 0x86, FIELD_ENH_SPEED, 4, 0x86])
+    for n, (t, hr) in enumerate(samples):
         body += bytes([0x00]) + struct.pack("<IB", int(t) - FIT_EPOCH, hr)
+        if terrain:
+            alt, speed = terrain[n]
+            body += struct.pack("<II", int(round((alt + 500) * 5)), int(round(speed * 1000)))
     header = struct.pack("<BBHI4s", 12, 0x10, 2132, len(body), b".FIT")
     with open(path, "wb") as f:
         f.write(header + bytes(body) + b"\x00\x00")

@@ -10,6 +10,8 @@
    är klar, och reglagen i steg 2, 3 och 4 sitter direkt under filmbilden.
 6. **Datorn somnar inte:** medan videon skapas hålls datorn vaken, och en lång vila
    avbryter inte längre videon.
+7. **Höjd och fart:** ett nytt val under videon. Höjdkurvan från klockan färgas efter farten,
+   från blå (långsamt) till röd (snabbt), och en liten löpare springer längs kurvan.
 
 ## Så kommer du igång
 
