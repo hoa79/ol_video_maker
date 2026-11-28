@@ -249,18 +249,18 @@ function showModal(title, html, buttons) {
 }
 function hideModal() { $("modal").hidden = true; $("modal").querySelector(".dialog").classList.remove("llguide"); }
 
-// Livelox-instruktionen: nio steg, ett steg i taget (skiss B, ux-design/livelox).
+// Livelox-instruktionen: alla nio steg i en lista man rullar i (skiss A, ux-design/livelox).
 // Skärmbilderna kommer från Livelox; namnen i deltagarlistan är utbytta mot påhittade.
 const LIVELOX_GUIDE = [
   {group: "I Livelox", text: "<b>Välj löparen</b> som ska visas. Kryssa i dig själv i listan <b>Participants</b>.",
    more: "Vill du visa flera? Kryssa i dem också.",
-   pic: `<img src="/static/livelox/deltagare.png" width="200" alt="Listan Participants i Livelox">`},
+   pic: `<img src="/static/livelox/deltagare.png" width="150" alt="Listan Participants i Livelox">`},
   {text: "<b>Välj uppspelningshastighet 1x.</b> Dra reglaget längst ner tills det står 1x.",
    more: "Annars går kartan inte i takt med headcam-filmen.",
-   pic: `<img src="/static/livelox/hastighet.png" width="190" alt="Reglaget för hastighet">`},
+   pic: `<img src="/static/livelox/hastighet.png" width="118" alt="Reglaget för hastighet">`},
   {text: "<b>Välj Follow selected participant.</b> Klicka på knappen uppe till vänster på kartan och välj det nedersta alternativet.",
    more: "Då följer kartan med dig hela loppet.",
-   pic: `<img src="/static/livelox/folj.png" width="300" alt="Menyn för att följa löpare"><span class="ring" style="left:0.7%;top:76%;width:98.6%;height:20.5%"></span>`},
+   pic: `<img src="/static/livelox/folj.png" width="241" alt="Menyn för att följa löpare"><span class="ring" style="left:0.7%;top:76%;width:98.6%;height:20.5%"></span>`},
   {group: "Spela in med Windows",
    text: `<b>Öppna skärminspelningen.</b> Tryck <kbd>⊞ Windows</kbd><span class="plus">+</span><kbd>Shift</kbd><span class="plus">+</span><kbd>S</kbd>`,
    more: "Klippverktyget öppnas. Det ingår i Windows 11. Har du Windows 10? Läs i guiden hur du gör med Xbox Game Bar."},
@@ -268,7 +268,7 @@ const LIVELOX_GUIDE = [
    more: "Rekommenderad storlek: <span class=\"pill\">640 × 1080 pixlar</span>, lika stort som kartan i videon på YouTube. " +
          "Får den inte plats? Tryck <kbd>F11</kbd> eller välj <span class=\"pill\">540 × 900</span>. " +
          "Zooma in så att kartan syns tydligt, men så att din längsta sträcka får plats.",
-   pic: `<img src="/static/livelox/rektangel.svg" width="375" alt="En smal, hög rektangel över kartan">`},
+   pic: `<img src="/static/livelox/rektangel.svg" width="300" alt="En smal, hög rektangel över kartan">`},
   {text: "<b>Starta videoinspelningen.</b> Klicka på <b>Starta</b> i Klippverktyget."},
   {text: "<b>Starta uppspelningen i Livelox.</b> Klicka på play-knappen."},
   {group: "Medan den spelar in", text: "<b>Vänta tills hela banan är klar.</b> Det tar lika lång tid som ditt lopp.",
@@ -288,39 +288,28 @@ function stepsModal(title, intro, steps, foot) {
             `<p class="foot">${esc(foot)}</p>`,
             [{text: "Öppna hela guiden", run: () => api("open_help")}, {text: "Stäng", primary: true}]);
 }
-let llStep = 0;
 function liveloxHelp() {
   showModal("Så spelar du in Livelox", "", []);
   $("modal").querySelector(".dialog").classList.add("llguide");
-  llStep = 0;
-  liveloxShow();
-}
-function liveloxShow() {
-  const n = LIVELOX_GUIDE.length, x = LIVELOX_GUIDE[llStep];
-  let group = "";
-  for (let j = 0; j <= llStep; j++) group = LIVELOX_GUIDE[j].group || group;
+  const list = h("div", {class: "llscroll", tabindex: 0});
+  LIVELOX_GUIDE.forEach((x, i) => {
+    if (x.group) list.append(h("div", {class: "llgrp"}, x.group));
+    list.append(h("div", {class: "llstep"},
+      h("span", {class: "llnum"}, i + 1),
+      h("div", {class: "lltext"}, h("div", {html: x.text}), x.more ? h("p", {html: x.more}) : null),
+      x.pic ? h("div", {class: "llpic", html: x.pic}) : null));
+  });
   const body = $("m-body");
   body.innerHTML = "";
-  body.append(
-    h("div", {class: "llkick"}, `Steg ${llStep + 1} av ${n} · ${group}`),
-    h("div", {class: "llstage" + (x.pic ? "" : " nopic")},
-      h("div", {class: "lltext"}, h("div", {class: "llnum"}, llStep + 1),
-        h("div", {html: x.text}), x.more ? h("p", {html: x.more}) : null),
-      x.pic ? h("div", {class: "llpic", html: x.pic}) : null),
-    h("div", {class: "lldots"}, LIVELOX_GUIDE.map((_, j) =>
-      h("button", {class: j < llStep ? "done" : j === llStep ? "on" : "", title: `Steg ${j + 1}`,
-                   onclick: () => { llStep = j; liveloxShow(); }}, j + 1))));
+  body.append(h("p", {class: "llintro"},
+    "Du spelar själv in det du ser på skärmen. Programmet hämtar aldrig något från Livelox."), list);
   const row = $("m-btns");
   row.innerHTML = "";
-  const last = llStep === n - 1;
   row.append(
     h("span", {class: "llsrc"}, "Skärmbilder: Livelox (namnen är påhittade)"),
     h("button", {class: "big second", onclick: () => api("open_help")}, "Öppna hela guiden"),
-    h("button", {class: "big second", disabled: llStep === 0,
-                 onclick: () => { llStep--; liveloxShow(); }}, "‹ Tillbaka"),
-    h("button", {class: "big", onclick: () => { if (last) hideModal(); else { llStep++; liveloxShow(); } }},
-      last ? "Klart" : "Nästa ›"));
-  row.lastChild.focus();
+    h("button", {class: "big", onclick: hideModal}, "Stäng"));
+  list.focus();
 }
 function fitHelp() {
   stepsModal("Hämta pulsfilen från Garmin Connect",
@@ -1098,9 +1087,9 @@ $("modal").addEventListener("click", (e) => { if (e.target.id === "modal") hideM
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !$("modal").hidden) hideModal();
   if (!$("modal").hidden && $("modal").querySelector(".llguide")) {
-    // Piltangenterna bläddrar i Livelox-instruktionen.
-    if (e.key === "ArrowRight" && llStep < LIVELOX_GUIDE.length - 1) { llStep++; liveloxShow(); }
-    if (e.key === "ArrowLeft" && llStep > 0) { llStep--; liveloxShow(); }
+    // Piltangenterna rullar i Livelox-instruktionen, även när en knapp har fokus.
+    const list = $("modal").querySelector(".llscroll"), d = {ArrowDown: 60, ArrowUp: -60}[e.key];
+    if (d && document.activeElement !== list) { list.scrollBy({top: d}); e.preventDefault(); }
   }
   if (e.key === "Enter" && !termsShown && $("modal").hidden && !["INPUT", "BUTTON", "A"].includes(document.activeElement.tagName)) {
     if (current < PAGES.length - 1) $("next").click();
