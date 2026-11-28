@@ -968,7 +968,8 @@ const PulsePage = {
       out += `<path d="${path}" fill="none" stroke="#ff5a6a" stroke-width="2" stroke-linejoin="round"/>`;
     }
     const sx = this.x(d.suggestion), sv = this.at(d.suggestion) ?? this.lo;
-    const sy = Math.min(y0 + ph - 10, this.y(sv) + 30);
+    // Med farten hoppar kurvan mycket, så texten står längst ner vid handtaget.
+    const sy = speed ? y0 + ph - 10 : Math.min(y0 + ph - 10, this.y(sv) + 30);
     const right = sx > x0 + pw - 220;
     out += `<text x="${sx + (right ? -8 : 8)}" y="${sy}" text-anchor="${right ? "end" : "start"}" style="fill:#f2c94c;font-size:13px">↑ Förslag: ${speed ? "farten ökar" : "pulsen stiger"} här</text>`;
     out += `<g id="cursor"></g>`;
