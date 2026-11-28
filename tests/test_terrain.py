@@ -116,7 +116,9 @@ class TerrainPlan(unittest.TestCase):
             self.assertIn("scale=1280:900", fg)            # headcam ovanför bandet
             self.assertIn("clip((425.000+t)/445.000,0,1)", fg)
             for lv in range(len(PERIODS)):
-                self.assertIn(f"overlay@trun{lv}", fg)
+                self.assertIn(f"[trun{lv}]", fg)
+            self.assertIn(f"streamselect@tsel=inputs={len(PERIODS)}", fg)
+            self.assertEqual(fg.count("overlay@trun"), 1)  # en enda löpare i videon
             self.assertIn("min/km", fg)
             self.assertIn("långsamt", fg)
             cmds = read(os.path.join(tmp, "hojd_kommandon.txt"), "r")

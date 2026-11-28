@@ -262,11 +262,14 @@ def build_band(track: TerrainTrack, tmpdir: str, k: int, box_w: int, H: int, sta
             px = int(leg_x + f * lw - pw / 2)
         if i == 0:
             first_pace = txt
-        for lv in range(len(PERIODS)):
-            y = ry if lv == level else -1000
-            if state.get(f"run{lv}") != y:
-                state[f"run{lv}"] = y
-                cmds.append(f"overlay@trun{lv} y {y}")
+        # En enda löpare i videon; streamselect väljer takten (billigare än en per takt).
+        if level >= 0 and state.get("lvl") != level:
+            state["lvl"] = level
+            cmds.append(f"streamselect@tsel map {level}")
+        y = ry if level >= 0 else -1000
+        if state.get("ry") != y:
+            state["ry"] = y
+            cmds.append(f"overlay@trun y {y}")
         if state.get("ptr") != px:
             state["ptr"] = px
             cmds.append(f"overlay@tptr x {px}")
@@ -290,17 +293,17 @@ def build_band(track: TerrainTrack, tmpdir: str, k: int, box_w: int, H: int, sta
     # Varje bild läses och skalas EN gång och upprepas sedan av loop-filtret (som pulsbandet).
     rep = f"loop=loop=-1:size=1,setpts=N/({fps})/TB"
     chains = [
-        f"[{i_c}:v]scale={gw}:{gh}:flags=area,format=rgba,{rep}[tc]",
+        f"[{i_c}:v]scale={gw}:{gh}:flags=area,format=yuv420p,{rep}[tc]",
         f"[{i_g}:v]scale={gw}:{gh}:flags=area,format=rgba,"
-        f"pad={2 * gw}:{gh}:0:0:color=black@0,{rep}[tg]",
+        f"pad={2 * gw}:{gh}:0:0:color=black@0,format=yuva420p,{rep}[tg]",
         f"[tg]crop={gw}:{gh}:x='{cut}':y=0[tgc]",
-        f"[tc][tgc]overlay=x='{cut}':y=0:format=rgb[tband]",
-        f"[{i_l}:v]format=rgba,{rep}[tleg]",
-        f"[{i_p}:v]format=rgba,{rep}[tptr]",
+        f"[tc][tgc]overlay=x='{cut}':y=0:format=yuv420[tband]",
+        f"[{i_l}:v]format=yuva420p,{rep}[tleg]",
+        f"[{i_p}:v]format=yuva420p,{rep}[tptr]",
     ]
     for lv, per in enumerate(PERIODS):
         rate = RUN_FRAMES / per
-        chains.append(f"[{first_input + 4 + lv}:v]format=rgba,"
+        chains.append(f"[{first_input + 4 + lv}:v]format=yuva420p,"
                       f"loop=loop=-1:size={RUN_FRAMES}:start=0,setpts=N/({rate:.4f})/TB,"
                       f"fps={fps}[trun{lv}]")
 
@@ -308,12 +311,9 @@ def build_band(track: TerrainTrack, tmpdir: str, k: int, box_w: int, H: int, sta
           f"[tm0][tband]overlay=x={gx}:y={gy}[tm1];"
           f"[tm1][tleg]overlay=x={leg_x}:y={leg_y}[tm2];"
           f"[tm2][tptr]overlay@tptr=x=-1000:y={leg_y - ph - 1 * k}[tm3]")
-    cur = "tm3"
-    for lv in range(len(PERIODS)):
-        nxt = f"tr{lv}"
-        ov += f";[{cur}][trun{lv}]overlay@trun{lv}=x='{run_x}':y=-1000[{nxt}]"
-        cur = nxt
-    ov += f";[{cur}]null"
+    sel = "".join(f"[trun{lv}]" for lv in range(len(PERIODS)))
+    ov += (f";{sel}streamselect@tsel=inputs={len(PERIODS)}:map=0[trun]"
+           f";[tm3][trun]overlay@trun=x='{run_x}':y=-1000")
     font, bold = (list(fonts) + [None, None])[:2]
     tfont = bold or font
     if tfont:

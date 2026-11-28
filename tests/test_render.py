@@ -305,6 +305,48 @@ class Render(unittest.TestCase):
             self.assertNotIn(core.choose_encoder(), core.HW_ENCODERS)
 
 
+class FrameRate(unittest.TestCase):
+    """Halva bildfrekvensen (snabbare 4K): sätts direkt efter avkodningen."""
+
+    def setUp(self):
+        from ol_video_maker.core import MediaInfo
+        self.infos = [MediaInfo(p, 100.0, 3840, 2160, True, "60000/1001", "hevc")
+                      for p in ("GX010001.MP4", "GX020001.MP4")]
+        self.ll = MediaInfo("livelox.mp4", 400.0, 640, 1080, False, "30/1")
+
+    def plan(self, **kw):
+        from ol_video_maker.core import build_plan
+        job = Job([i.path for i in self.infos], self.ll.path, "ut.mp4", livelox_sync=0,
+                  lead_in=0, scale=2, **kw)
+        plan = build_plan(job, self.infos, self.ll, "libx264")
+        return plan.cmd[plan.cmd.index("-filter_complex") + 1]
+
+    def test_half_fps(self):
+        from ol_video_maker.core import half_fps
+        self.assertEqual(half_fps("60000/1001"), "30000/1001")
+        self.assertEqual(half_fps("60/1"), "30/1")
+        self.assertEqual(half_fps("50/1"), "25/1")
+        self.assertEqual(half_fps("120000/1001"), "60000/1001")
+        self.assertIsNone(half_fps("30000/1001"))
+        self.assertIsNone(half_fps("25/1"))
+        self.assertIsNone(half_fps("nonsens"))
+
+    def test_one_file(self):
+        fg = self.plan(headcam_sync=10, end_time=20, fps="30000/1001", headcam_flip=True)
+        self.assertTrue(fg.startswith("[0:v:0]fps=30000/1001,hflip,vflip,scale="), fg[:80])
+        self.assertNotIn("fps=", self.plan(headcam_sync=10, end_time=20))  # kamerans frekvens
+
+    def test_chapters(self):
+        fg = self.plan(headcam_sync=95, end_time=105, fps="30000/1001")
+        self.assertIn("[0:v:0]fps=30000/1001,scale=", fg)
+        self.assertIn("[1:v:0]fps=30000/1001,scale=", fg)
+        self.assertIn("fps=30000/1001,format=yuv420p[hv1]", fg)
+
+    def test_bad_fps(self):
+        with self.assertRaises(VideoMakerError):
+            self.plan(headcam_sync=10, end_time=20, fps="0/0")
+
+
 class EncoderSettings(unittest.TestCase):
     def test_youtube_friendly(self):
         from ol_video_maker.core import HW_ENCODERS, encoder_args

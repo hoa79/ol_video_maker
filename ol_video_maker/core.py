@@ -459,6 +459,28 @@ class Job:
     pulse: Optional["PulseTrack"] = None  # puls från klockan (frivilligt), se pulse_video.py
     placing: Optional["PlacingTrack"] = None  # placeringslinjen (frivilligt), placing_video.py
     terrain: Optional["TerrainTrack"] = None  # höjd och fart (frivilligt), terrain_video.py
+    # Bildfrekvens i videon, t.ex. "30000/1001". None = samma som kameran. Färre bilder per
+    # sekund i 4K gör videon klart snabbare att skapa (se half_fps).
+    fps: Optional[str] = None
+
+
+def _fps_value(fps: str) -> float:
+    m = re.match(r"^(\d+)(?:/(\d+))?$", str(fps or ""))
+    if not m or int(m.group(1)) <= 0 or (m.group(2) is not None and int(m.group(2)) <= 0):
+        return 0.0
+    return int(m.group(1)) / int(m.group(2) or 1)
+
+
+def half_fps(fps: str) -> Optional[str]:
+    """Halva bildfrekvensen (60 -> 30, 59,94 -> 29,97, 50 -> 25), eller None om filmen redan
+    har högst 31 bilder per sekund (då finns inget att vinna)."""
+    if _fps_value(fps) <= 31:
+        return None
+    num, _, den = str(fps).partition("/")
+    den = int(den or 1)
+    if int(num) % 2 == 0:
+        return f"{int(num) // 2}/{den}"
+    return f"{num}/{den * 2}"
 
 
 @dataclass
@@ -502,6 +524,8 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
                               "eller placering.")
     if job.scale not in (1, 2):
         raise VideoMakerError("Upplösningen måste vara Full HD eller 4K.")
+    if job.fps is not None and _fps_value(job.fps) <= 0:
+        raise VideoMakerError("Ogiltig bildfrekvens.")
     # Full HD (1920x1080) eller 4K (3840x2160): allt mäts i Full HD-pixlar och skalas upp.
     k = job.scale
     W, H = OUT_W * k, OUT_H * k
@@ -547,6 +571,10 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
         cmd += ["-ss", f"{local_start:.3f}", "-i", info.path]
     n_hc = len(segments)
     ll_idx = n_hc
+    # Bildfrekvensen i videon. Ett lägre värde än kamerans sätts direkt efter avkodningen, så
+    # att skalning, band och kodning bara görs för de bilder som blir kvar.
+    out_fps = job.fps or segments[0][0].fps
+    reduce_fps = job.fps is not None and _fps_value(job.fps) < _fps_value(segments[0][0].fps) - 0.01
 
     # Livelox
     cmd += ["-ss", f"{ll_seek:.3f}", "-i", livelox_info.path]
@@ -581,7 +609,7 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
             temp_files.append(tmpdir)
         first = ll_idx + 1 + (0 if hc_audio else 1)
         band = build_band(job.pulse, tmpdir, k, hc_box_w, H, start, duration, first,
-                          fps=segments[0][0].fps)
+                          fps=out_fps)
         cmd += band.inputs
     tband = None
     if job.terrain is not None:
@@ -592,22 +620,23 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
             temp_files.append(tmpdir)
         first = ll_idx + 1 + (0 if hc_audio else 1)
         tband = build_terrain(job.terrain, tmpdir, k, hc_box_w, H, start, duration, first,
-                              (font, bold_font), _escape_filter_value, fps=segments[0][0].fps)
+                              (font, bold_font), _escape_filter_value, fps=out_fps)
         cmd += tband.inputs
 
     chains: List[str] = []
     if n_hc == 1:
-        hc_v = "[0:v:0]"
+        hc_v = f"[0:v:0]fps={out_fps}," if reduce_fps else "[0:v:0]"
         audio_map = "0:a:0" if hc_audio else f"{ll_idx + 1}:a:0"
     else:
         # concat-filtret kräver samma bildstorlek, SAR, bildfrekvens och ljudformat i alla
         # delar. Normalisera därför varje del till headcam-rutans storlek och första
         # filens bildfrekvens, så att även filer från olika kameror går att foga ihop.
-        fps = segments[0][0].fps
+        fps = out_fps
         pads = ""
         for i in range(n_hc):
+            early = f"fps={fps}," if reduce_fps else ""
             chains.append(
-                f"[{i}:v:0]scale={hc_box_w}:{hc_box_h}:force_original_aspect_ratio=decrease"
+                f"[{i}:v:0]{early}scale={hc_box_w}:{hc_box_h}:force_original_aspect_ratio=decrease"
                 f":force_divisible_by=2,pad={hc_box_w}:{hc_box_h}:(ow-iw)/2:(oh-ih)/2:color=black,"
                 f"setsar=1,fps={fps},format=yuv420p[hv{i}]"
             )

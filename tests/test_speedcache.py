@@ -131,11 +131,79 @@ class EstimateTest(DataDirTest):
                 break
             threading.Event().wait(0.05)
         self.assertTrue(state.render["ok"], state.render)
-        key = state._speed_key(1)
+        key = state._speed_key("1")
         with open(os.path.join(os.environ["OLVM_DATA_DIR"], speedcache.FILE_NAME),
                   encoding="utf-8") as f:
             self.assertEqual(json.load(f)[key]["kalla"], "video")
         self.assertIsNotNone(state.snapshot()["estimates"]["1"])
+
+
+class FastFourKTest(unittest.TestCase):
+    """4K med halva bildfrekvensen: eget minne och en uppskattning innan det mätts."""
+
+    def state_with(self, fps):
+        state = State(Dialogs())
+        state.hc_infos = [MediaInfo("hc.mp4", 600.0, 3840, 2160, True, fps, "hevc")]
+        state.ll_info = MediaInfo("ll.mp4", 600.0, 640, 1080, False, "30/1", "h264")
+        return state
+
+    def test_modes(self):
+        state = self.state_with("60000/1001")
+        self.assertTrue(state._can_fast())
+        self.assertIsNone(state._mode_fps("2"))
+        self.assertEqual(state._mode_fps("2f"), "30000/1001")
+        self.assertNotEqual(state._speed_key("2"), state._speed_key("2f"))
+        self.assertIn("bps 30000/1001", state._speed_key("2f"))
+        state.quality = 2
+        self.assertEqual(state._mode(), "2")
+        state.set_fast({"on": True})
+        self.assertEqual(state._mode(), "2f")
+
+    def test_fast_estimate_from_4k(self):
+        state = self.state_with("60000/1001")
+        state.video_length = lambda: 600.0
+        state.speeds = {"1": 4.0, "2": 2.0, "2f": None}
+        self.assertAlmostEqual(state.estimate("2"), 305.0)
+        self.assertAlmostEqual(state.estimate("2f"), 600.0 / (2.0 * webapp.FAST_FACTOR) + 5)
+        state.speeds["2f"] = 3.0
+        self.assertAlmostEqual(state.estimate("2f"), 205.0)
+
+    def test_camera_at_30_has_no_fast_choice(self):
+        state = self.state_with("30/1")
+        self.assertFalse(state._can_fast())
+        state.quality, state.fast4k = 2, True
+        self.assertEqual(state._mode(), "2")
+        self.assertEqual(state._speed_key("2f"), state._speed_key("2"))
+        self.assertFalse(state.snapshot()["canFast"])
+
+
+class RemainingTimeTest(unittest.TestCase):
+    def test_estimate_first_then_real_speed(self):
+        r = webapp.RemainingTime(600.0)
+        self.assertAlmostEqual(r.update(5.0, 0.01), 595.0)   # i början: uppskattningen
+        # Sedan går det hälften så fort som uppskattat: 1 % per 12 s -> 1200 s totalt.
+        left = None
+        for i in range(2, 60):
+            left = r.update(i * 12.0, i / 100)
+        self.assertAlmostEqual(left, (1 - 0.59) * 1200, delta=1)
+
+    def test_follows_recent_speed(self):
+        r = webapp.RemainingTime(None)
+        self.assertIsNone(r.update(1.0, 0.0))
+        p, t = 0.0, 0.0
+        for _ in range(100):      # snabbt först: 1 % per 2 s
+            t += 2; p += 0.01 * 0.4
+            r.update(t, p)
+        for _ in range(100):      # sedan dubbelt så långsamt
+            t += 4; p += 0.01 * 0.4
+            left = r.update(t, p)
+        self.assertAlmostEqual(left, (1 - p) / (0.004 / 4), delta=5)
+
+    def test_restart_from_zero(self):
+        r = webapp.RemainingTime(100.0)
+        for i in range(1, 40):
+            r.update(i, i / 100)
+        self.assertAlmostEqual(r.update(40.0, 0.0), 60.0)  # ny körning: uppskattningen igen
 
 
 if __name__ == "__main__":
