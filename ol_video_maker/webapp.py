@@ -409,6 +409,9 @@ class State:
         if me is None:
             return None
         r = self.splits.runners[me]
+        # Som placeringslinjen: bara en godkänd löpare (inte mp, dns …) har en officiell tid.
+        if not r.selectable or r.status != "ok":
+            return None
         t = r.splits[-1] if r.splits and r.splits[-1] is not None else r.time
         return float(t) if t else None
 

@@ -633,8 +633,19 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
             temp_files.append(tmpdir)
         # Varje input har precis ett "-i", så nästa inputs nummer är antalet hittills.
         clock = build_clock(job.clock, tmpdir, k, start, duration, cmd.count("-i"),
-                            (font, bold_font), _escape_filter_value, fps=out_fps)
+                            (font, bold_font), _escape_filter_value, fps=out_fps,
+                            box_w=hc_box_w // k)
         cmd += clock.inputs
+
+    # Med klockan (tid sedan start) hålls ett fält överst fritt för den: filmen får bara
+    # rummet under fältet, så klockan aldrig täcker headcam-bilden. I standardläget (16:9,
+    # kartan 640 px) ligger filmen ändå redan där, och den blir mindre bara när kartan är
+    # smal och ett band visas under videon.
+    hc_top = 0
+    if job.clock is not None:
+        from .clock_video import FIELD_H
+        hc_top = FIELD_H * k
+    hc_fit_h = hc_box_h - hc_top
 
     chains: List[str] = []
     if n_hc == 1:
@@ -649,8 +660,8 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
         for i in range(n_hc):
             early = f"fps={fps}," if reduce_fps else ""
             chains.append(
-                f"[{i}:v:0]{early}scale={hc_box_w}:{hc_box_h}:force_original_aspect_ratio=decrease"
-                f":force_divisible_by=2,pad={hc_box_w}:{hc_box_h}:(ow-iw)/2:(oh-ih)/2:color=black,"
+                f"[{i}:v:0]{early}scale={hc_box_w}:{hc_fit_h}:force_original_aspect_ratio=decrease"
+                f":force_divisible_by=2,pad={hc_box_w}:{hc_fit_h}:(ow-iw)/2:(oh-ih)/2:color=black,"
                 f"setsar=1,fps={fps},format=yuv420p[hv{i}]"
             )
             pads += f"[hv{i}]"
@@ -667,9 +678,9 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
 
     flip = "hflip,vflip," if job.headcam_flip else ""  # 180° = spegla både vågrätt och lodrätt
     hc_chain = (
-        f"{hc_v}{flip}scale={hc_box_w}:{hc_box_h}:force_original_aspect_ratio=decrease:force_divisible_by=2,"
+        f"{hc_v}{flip}scale={hc_box_w}:{hc_fit_h}:force_original_aspect_ratio=decrease:force_divisible_by=2,"
         f"setsar=1,"
-        f"pad={W}:{H}:0:'min((oh-ih)/2,{hc_box_h}-ih)':color=black,"
+        f"pad={W}:{H}:0:'max({hc_top},min((oh-ih)/2,{hc_box_h}-ih))':color=black,"
         f"format=yuv420p[base]"
     )
     ll_chain = (

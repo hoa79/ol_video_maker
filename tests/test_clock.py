@@ -143,3 +143,51 @@ class FontWidthTest(unittest.TestCase):
             w4, w5 = text_width(font, "0:00", 96), text_width(font, "00:00", 96)
             self.assertGreater(w4, 100)
             self.assertGreater(w5, w4)
+
+
+@unittest.skipUnless(HAVE_FFMPEG, "ffmpeg saknas")
+class ClockNeverCoversFilmTest(unittest.TestCase):
+    """Fältet överst hålls fritt från filmen när klockan är på: med och utan band under
+    videon och med smal, vanlig och bred kartkolumn."""
+
+    def test_field_free(self):
+        from ol_video_maker.clock_video import FIELD_H
+        from ol_video_maker.fitfile import HeartRate
+        from ol_video_maker.pulse_video import PulseTrack
+        tmp = tempfile.mkdtemp()
+        try:
+            hc = os.path.join(tmp, "hc.mp4")
+            ll = os.path.join(tmp, "ll.mp4")
+            make_clip(hc, 2, "1280x720", color_src="color=c=white", audio=False)
+            make_clip(ll, 2, "640x360", color_src="color=c=black", audio=False)
+            hr = HeartRate([float(s) for s in range(5)], [150] * 5)
+            for band in (False, True):
+                for lw in (320, 640, 960):
+                    out = os.path.join(tmp, f"ut_{band}_{lw}.mp4")
+                    render(Job([hc], ll, out, lead_in=0, end_time=1.0, livelox_width=lw,
+                               pulse=PulseTrack(hr, offset=0) if band else None,
+                               clock=ClockTrack(race_start=0.0)))
+                    box_w = 1920 - lw
+                    # Raden precis ovanför fältets kant: svart (ingen film) …
+                    for x in range(box_w // 2, box_w - 4, 97):
+                        self.assertLess(sum(pixel(out, 0.5, x, FIELD_H - 3)), 120,
+                                        (band, lw, x))
+                    # … och filmen syns under fältet.
+                    self.assertGreater(sum(pixel(out, 0.5, box_w // 4, FIELD_H + 120)), 600,
+                                       (band, lw))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_scaled_down_when_narrow(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            from ol_video_maker.core import find_font
+            tr = ClockTrack(race_start=0.0, finish=4000.0, official=4000.0)
+            wide = build_clock(tr, tmp, 1, 0.0, 4010.0, 3, (find_font(), find_font(True)),
+                               _escape_filter_value, box_w=1280).overlays
+            narrow = build_clock(tr, tmp, 1, 0.0, 4010.0, 3, (find_font(), find_font(True)),
+                                 _escape_filter_value, box_w=640).overlays
+            self.assertIn("fontsize=96", wide)
+            self.assertNotIn("fontsize=96", narrow)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)

@@ -2,6 +2,8 @@
 
 Ett stoppur och en stor tid står uppe till vänster i det svarta fältet ovanför headcam-filmen,
 med en grå etikett direkt efter siffrorna på samma baslinje ("sedan start" eller "i mål").
+Fältet (FIELD_H) hålls alltid fritt från filmen när klockan är på, även när ett band visas
+under videon eller kartan är smal (då blir filmen lite mindre).
 Etikettens plats räknas ur typsnittets teckenbredder (fontwidth.py). Klockan täcker varken filmen,
 kartan eller fältet under videon, och den fungerar med alla val under videon.
 
@@ -32,7 +34,9 @@ GREY = "0x8a8a8a"
 LABEL = "0xa8a8a8"
 GREEN = "0x38d26b"
 
-# Geometri i Full HD-pixlar (skalas med k i 4K). Fältet ovanför en 16:9-film är 180 px högt.
+# Geometri i Full HD-pixlar (skalas med k i 4K). core.py håller fältet FIELD_H överst fritt
+# från headcam-filmen när klockan visas, så klockan ryms alltid där (y 0–FIELD_H).
+FIELD_H = 180
 BASELINE = 132               # siffrornas och etikettens baslinje
 TIME_SIZE = 96
 TEXT_X = 128
@@ -150,17 +154,12 @@ def _running_text(t0: float, rate: float, hours: bool) -> str:
 
 def build_clock(track: ClockTrack, tmpdir: str, k: int, start: float, duration: float,
                 first_input: int, fonts: Tuple[Optional[str], Optional[str]],
-                escape: Callable[[str], str], fps: str = "30") -> Clock:
+                escape: Callable[[str], str], fps: str = "30", box_w: int = 1280) -> Clock:
     """Bygg klockans filter. start/duration: videons del av headcam-filmen (videons t=0 är
-    start). Klockan läggs på [in] med overlays, som börjar med ',' (fortsätter kedjan)."""
+    start). box_w: headcam-rutans bredd i Full HD-pixlar; klockan görs mindre om den inte
+    ryms där (bred kartkolumn). Overlays börjar med "[..];" och fortsätter kedjan."""
     font, bold = fonts
     bold = bold or font
-    icon = os.path.join(tmpdir, "stoppur.pam")
-    size = ICON_SIZE * k
-    with open(icon, "wb") as f:
-        f.write(draw_watch(size))
-    rep = f"loop=loop=-1:size=1,setpts=N/({fps})/TB"
-    chains = [f"[{first_input}:v]format=rgba,{rep}[clk]"]
 
     t_start = track.race_start - start
     stop = track.finish_at()
@@ -188,20 +187,36 @@ def build_clock(track: ClockTrack, tmpdir: str, k: int, start: float, duration: 
         parts.append((max(0.0, t_stop), end, final, GREEN, False,
                       LABEL_OFFICIAL if track.official else LABEL_FINISH, final))
 
-    ov = f"[clkin];[clkin][clk]overlay=x={ICON_X * k}:y={ICON_Y * k}:shortest=0:eof_action=repeat"
+    def label_x(sample: str) -> float:
+        return TEXT_X + text_width(bold, sample, TIME_SIZE) + LABEL_GAP
+
+    # Får klockan plats i headcam-rutans bredd? Annars görs hela klockan mindre (mitt i fältet).
+    parts = [p for p in parts if p[1] > p[0]]
+    widest = max((label_x(p[6]) + text_width(font or bold, p[5], LABEL_SIZE) for p in parts),
+                 default=0.0)
+    sc = min(1.0, (box_w - 24) / widest) if widest > 0 else 1.0
+    z = k * sc
+
+    def y_of(y: float) -> int:
+        return int(round((FIELD_H / 2 + (y - FIELD_H / 2) * sc) * k))
+
+    icon = os.path.join(tmpdir, "stoppur.pam")
+    with open(icon, "wb") as f:
+        f.write(draw_watch(max(8, int(round(ICON_SIZE * z)))))
+    rep = f"loop=loop=-1:size=1,setpts=N/({fps})/TB"
+    chains = [f"[{first_input}:v]format=rgba,{rep}[clk]"]
+    ov = (f"[clkin];[clkin][clk]overlay=x={int(round(ICON_X * z))}:y={y_of(ICON_Y)}"
+          f":shortest=0:eof_action=repeat")
     if not bold:
         return Clock(inputs=["-i", icon], chains=chains, overlays=ov, files=[icon])
     fb, fr = escape(bold), escape(font or bold)
-    base = BASELINE * k
+    base = y_of(BASELINE)
     for a, b, text, color, expand, label, sample in parts:
-        if b <= a:
-            continue
         en = f"between(t\\,{a:.3f}\\,{b - 0.0005:.3f})"
-        lx = TEXT_X + text_width(bold, sample, TIME_SIZE) + LABEL_GAP
         ov += (f",drawtext=fontfile='{fb}':text='{escape(text)}'"
-               f":expansion={'normal' if expand else 'none'}:fontsize={TIME_SIZE * k}"
-               f":fontcolor={color}:x={TEXT_X * k}:y={base}-max_glyph_a:enable='{en}'")
+               f":expansion={'normal' if expand else 'none'}:fontsize={int(round(TIME_SIZE * z))}"
+               f":fontcolor={color}:x={int(round(TEXT_X * z))}:y={base}-max_glyph_a:enable='{en}'")
         ov += (f",drawtext=fontfile='{fr}':text='{escape(label)}':expansion=none"
-               f":fontsize={LABEL_SIZE * k}:fontcolor={LABEL}:x={int(round(lx * k))}"
-               f":y={base}-max_glyph_a:enable='{en}'")
+               f":fontsize={int(round(LABEL_SIZE * z))}:fontcolor={LABEL}"
+               f":x={int(round(label_x(sample) * z))}:y={base}-max_glyph_a:enable='{en}'")
     return Clock(inputs=["-i", icon], chains=chains, overlays=ov, files=[icon])
