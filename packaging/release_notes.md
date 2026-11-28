@@ -1,21 +1,24 @@
 ## Nyheter i den här versionen
 
+1. **Höjd och fart:** ett nytt val under videon. Höjdkurvan från klockan färgas efter farten,
+   från blå (långsamt) till röd (snabbt), och en liten löpare springer längs kurvan.
+2. **Datorn somnar inte:** medan videon skapas hålls datorn vaken, och en lång vila
+   avbryter inte längre videon. I steg 5 står det om datorn hålls vaken, och en glad
+   uppmaning visas medan du väntar.
+3. **Snabbare 4K:** under **Fler val för 4K** kan du välja 30 bilder per sekund, som går
+   ungefär en tredjedel fortare att skapa. Höjd och fart-bandet går också fortare i 4K.
+4. **Klar ungefär kl. …:** medan videon skapas står det när den blir klar. Tiden räknas om
+   efter hur fort det faktiskt går.
+
+## Från förra betaversionen (v0.4.0-beta)
+
 1. **Placering under loppet:** klistra in sträcktiderna från Livelox, så visar videon hur din
    placering ändras från kontroll till kontroll.
 2. **Garmin-instruktionen** visar rätt menyval: **Export File**.
 3. **Livelox-instruktionen** visar alla nio stegen i en lista som du rullar i.
-4. **Snabbare steg 5:** programmet minns hur snabb datorn är, så tidsuppskattningen
-   behöver inte provkoda varje gång.
+4. **Snabbare steg 5:** programmet minns hur snabb datorn är.
 5. **Tydligare steg:** siffran vid ett kort eller en knapp blir en grön bock när den delen
-   är klar, och reglagen i steg 2, 3 och 4 sitter direkt under filmbilden.
-6. **Datorn somnar inte:** medan videon skapas hålls datorn vaken, och en lång vila
-   avbryter inte längre videon.
-7. **Höjd och fart:** ett nytt val under videon. Höjdkurvan från klockan färgas efter farten,
-   från blå (långsamt) till röd (snabbt), och en liten löpare springer längs kurvan.
-8. **Snabbare 4K:** under **Fler val för 4K** kan du välja 30 bilder per sekund, som går
-   ungefär en tredjedel fortare att skapa. Höjd och fart-bandet går också fortare i 4K.
-9. **Klar ungefär kl. …:** medan videon skapas står det när den blir klar. Tiden räknas om
-   efter hur fort det faktiskt går.
+   är klar.
 
 ## Så kommer du igång
 
