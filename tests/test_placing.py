@@ -202,6 +202,49 @@ class SceneTest(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class LiveloxTimeTest(unittest.TestCase):
+    """Alla tider i placeringslinjen kommer från sträcktiderna (simons felrapport: i mål i
+    filmen men pricken stod mellan två kontroller)."""
+
+    def setUp(self):
+        self.sp = S.parse(EXEMPEL)
+
+    def test_finish_in_film_is_finish_in_line(self):
+        # Elias Hall: 34:00 i Livelox. I filmen går start -> mål bara 32:00 (t.ex. starten
+        # synkad lite sent). Vid målgången i filmen ska han ändå stå i mål.
+        tr = PlacingTrack(self.sp, [0, 1], me=2, consent=True, race_start=100.0,
+                          race_end=100.0 + 32 * 60)
+        self.assertAlmostEqual(tr.race_time(100.0 + 32 * 60), 34 * 60)
+        self.assertAlmostEqual(tr.race_time(100.0), 0.0)
+        m = S.moment(self.sp, self.sp.runners[2], tr.race_time(100.0 + 32 * 60))
+        self.assertTrue(m.finished)
+        texts = " ".join(t for it in Scene(tr, 1280).at(tr.race_time(100.0 + 32 * 60))
+                         if isinstance(it.obj, Text) for t, _, _ in it.obj.parts)
+        self.assertIn("i mål", texts)
+
+    def test_without_finish_mark_film_time_is_used(self):
+        tr = PlacingTrack(self.sp, [0, 1], me=2, consent=True, race_start=100.0)
+        self.assertAlmostEqual(tr.race_time(700.0), 600.0)
+
+    def test_without_me_film_time_is_used(self):
+        tr = PlacingTrack(self.sp, [0, 1], me=None, consent=True, race_start=100.0,
+                          race_end=2000.0)
+        self.assertAlmostEqual(tr.race_time(700.0), 600.0)
+
+    def test_band_follows_livelox_time(self):
+        tmp = tempfile.mkdtemp()
+        try:
+            # Filmen: start vid 0 s, målgång vid 1000 s. Elias Hall har 34:00 = 2040 s.
+            tr = PlacingTrack(self.sp, [0], me=2, consent=True, race_start=0.0,
+                              race_end=1000.0)
+            build_band(tr, tmp, 1, 1280, 990.0, 10.0, 3, [], lambda v: v)
+            with open(os.path.join(tmp, "placering.ass"), encoding="utf-8") as f:
+                ass = f.read()
+            self.assertIn("i mål", ass)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg saknas")
 class RenderTest(unittest.TestCase):
     @classmethod

@@ -28,7 +28,8 @@ import struct
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from .splits import MAX_SHOWN, TREND_LIMIT, Moment, Splits, moment, ordinal, short_names
+from .splits import (MAX_SHOWN, TREND_LIMIT, Moment, Splits, moment, ordinal, race_time,
+                     short_names)
 
 BAND_H = 180                 # samma fält som pulsbandet (Full HD-pixlar)
 STEP = 0.5                   # sekunder mellan uppdateringar i videon
@@ -53,6 +54,7 @@ class PlacingTrack:
     """Placeringar som ska visas i videon.
 
     race_start: tid i headcam-filmen när loppet startar (synkögonblicket i steg 2).
+    race_end: tid i headcam-filmen vid målgången (steg 3), eller None om den inte är markerad.
     shown: index (i splits.runners) för de löpare som syns. me: ditt index eller None.
     consent: kryssrutan "De jag visar med namn vet om det …".
     """
@@ -61,6 +63,21 @@ class PlacingTrack:
     me: Optional[int]
     consent: bool
     race_start: float = 0.0
+    race_end: Optional[float] = None
+
+    def finish(self) -> Optional[int]:
+        """Din sluttid enligt sträcktiderna (sekunder), eller None."""
+        sp = self.splits
+        if self.me is None or not (0 <= self.me < len(sp.runners)):
+            return None
+        r = sp.runners[self.me]
+        return r.splits[-1] if r.splits else None
+
+    def race_time(self, video_t: float) -> float:
+        """Lopptiden enligt Livelox vid tiden video_t i headcam-filmen. Är målgången markerad
+        i filmen står du i mål i linjen precis när du går i mål i filmen (se
+        splits.race_time)."""
+        return race_time(video_t, self.race_start, self.race_end, self.finish())
 
 
 # ---------------------------------------------------------------------------
@@ -573,7 +590,7 @@ def build_band(track: PlacingTrack, tmpdir: str, k: int, box_w: int, start: floa
     n = int(math.ceil(duration / STEP)) + 1
     for j in range(n):
         tau = min(duration, j * STEP)
-        race_t = start + tau - track.race_start
+        race_t = track.race_time(start + tau)
         seen = set()
         figs: Dict[str, Tuple[int, int]] = {}
         for it in scene.at(race_t):
