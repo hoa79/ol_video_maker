@@ -330,8 +330,8 @@ function liveloxHelp() {
   list.focus();
 }
 function fitHelp() {
-  stepsModal("Hämta pulsfilen från Garmin Connect",
-    "Filen innehåller pulsen från ditt lopp. Den läses bara på din dator.", FIT_STEPS,
+  stepsModal("Hämta filen från Garmin Connect",
+    "Filen innehåller pulsen, höjden och farten från ditt lopp. Den läses bara på din dator.", FIT_STEPS,
     "Utan internet: anslut klockan till datorn med USB-kabeln. Filerna ligger i mappen " +
     "GARMIN\\Activity på klockan. Den senaste är ditt senaste pass.");
 }
@@ -538,12 +538,12 @@ const FilesPage = {
       if (!disabled) p.opts[what] = el;
       return el;
     };
-    // Puls: pulsfilen från klockan
+    // Puls eller höjd och fart: filen från klockan
     p.status = h("div", {class: "okline"});
     p.facts = h("div", {class: "facts"});
     p.profile = h("div", {class: "tprofile"});
     p.remove = h("button", {class: "ghost lg", onclick: () => api("remove_fit")}, "Ta bort");
-    p.pick = h("button", {class: "big", onclick: () => api("pick_fit")}, "Välj pulsfil…");
+    p.pick = h("button", {class: "big", onclick: () => api("pick_fit")}, "Välj fil från klockan…");
     p.pulse = h("div", {class: "udetail"},
       h("div", {class: "pulsemid"}, p.status, p.facts, p.profile,
         h("a", {class: "link", onclick: fitHelp}, "Hur hämtar jag .fit-filen från Garmin?")),
@@ -605,12 +605,17 @@ const FilesPage = {
     p.pulse.hidden = !watch;
     const ter = hr && hr.terrain;
     const noTerrain = S.under === "terrain" && hr && !ter;
+    const noPulse = S.under === "pulse" && hr && !hr.hasPulse;
     p.placing.hidden = S.under !== "placing";
     if (S.loading.fit) { p.status.className = "okline wait"; p.status.textContent = "Läser filen…"; }
     else if (err) { p.status.className = "okline err"; p.status.textContent = "⚠ " + err; }
     else if (noTerrain) {
       p.status.className = "okline err";
       p.status.textContent = `⚠ ${hr.name} saknar höjd eller fart. Hade klockan GPS på under loppet?`;
+    }
+    else if (noPulse) {
+      p.status.className = "okline err";
+      p.status.textContent = `⚠ ${hr.name} saknar puls. Välj Höjd och fart i stället, eller en fil med puls.`;
     }
     else if (hr) { p.status.className = "okline"; p.status.textContent = "✓ " + hr.name; }
     else { p.status.className = "okline wait"; p.status.textContent = "Välj filen (.fit) från din klocka."; }
@@ -621,10 +626,10 @@ const FilesPage = {
       p.facts.innerHTML = S.under === "terrain" && ter
         ? head + `<span>Höjd <b>${ter.altMin}–${ter.altMax} m</b></span>` +
           `<span>Fart <b>${esc(ter.fast)}–${esc(ter.slow)}</b> min/km</span>`
-        : head + `<span>Puls <b>${hr.min}–${hr.max}</b> slag/min</span>`;
+        : head + (hr.hasPulse ? `<span>Puls <b>${hr.min}–${hr.max}</b> slag/min</span>` : "");
       p.pick.className = "ghost lg"; p.pick.textContent = "Byt fil…";
     } else {
-      p.pick.className = S.hc && S.ll ? "big" : "big second"; p.pick.textContent = "Välj pulsfil…";
+      p.pick.className = S.hc && S.ll ? "big" : "big second"; p.pick.textContent = "Välj fil från klockan…";
     }
     p.remove.hidden = !hr;
     const showProf = S.under === "terrain" && !!ter;
@@ -642,7 +647,7 @@ const FilesPage = {
       p.pbtn.textContent = "Klistra in sträcktider…";
     }
     p.remove.hidden = !hr;
-    setDone(p.num, (S.under === "pulse" && hr) || (S.under === "terrain" && ter) ||
+    setDone(p.num, (S.under === "pulse" && hr && hr.hasPulse) || (S.under === "terrain" && ter) ||
       (S.under === "placing" && pl && pl.runners.length));
   },
 };
@@ -822,12 +827,27 @@ const SyncPage = {
   },
 };
 
-// --- 2b. Synka pulsen (bara med pulsfil) ---
+// --- 2b. Synka klockan (bara med fil från klockan) ---
+// Kurvan följer valet under videon: pulsen vid Puls, farten vid Höjd och fart. Båda ger
+// samma sak: var loppet startar i klockans tid.
+function clockKind() {
+  const hr = S && S.hr;
+  if (!hr || (S.under !== "pulse" && S.under !== "terrain")) return null;
+  if (S.under === "terrain" && hr.terrain) return "speed";
+  return hr.hasPulse ? "pulse" : null;
+}
 const PulsePage = {
-  number: 2, kicker: "Steg 2 av 5 · Puls", optional: true, title: "Hitta starten i pulsen", nextStep: 3,
+  number: 2, optional: true, nextStep: 3,
   sub: true, tip: "Klart! Tryck på Nästa.",
-  lead: "Klockan vet inte var filmen börjar. Dra den lila linjen till där loppet startar. Där brukar pulsen <b>stiga brant</b>.",
-  active: () => (S.under === "pulse" || S.under === "terrain") && !!S.hr,
+  get speed() { return clockKind() === "speed"; },
+  get kicker() { return this.speed ? "Steg 2 av 5 · Fart" : "Steg 2 av 5 · Puls"; },
+  get title() { return this.speed ? "Hitta starten i farten" : "Hitta starten i pulsen"; },
+  get navName() { return this.speed ? "⛰️ Synka farten" : "♥ Synka pulsen"; },
+  get lead() {
+    return "Klockan vet inte var filmen börjar. Dra den lila linjen till där loppet startar. Där brukar " +
+      (this.speed ? "farten <b>öka tydligt</b>." : "pulsen <b>stiga brant</b>.");
+  },
+  active: () => !!clockKind(),
   ready() { return S.hr && S.fitStart === null ? "Dra linjen och tryck på <b>Starten är här</b>." : null; },
   ML: 46, MR: 18, MT: 38, MB: 30,
   build(root) {
@@ -845,7 +865,7 @@ const PulsePage = {
     this.status = h("div", {class: "status"});
     const nudges = [["« 1 min", -60], ["« 10 s", -10], ["‹ 1 s", -1], ["1 s ›", 1], ["10 s »", 10], ["1 min »", 60]];
     const left = h("div", {class: "card"},
-      h("h2", {}, this.n1 = num(1), h("span", {html: HEART_SVG(16, "#2a2a22")}), "Din puls från klockan", this.range),
+      h("h2", {}, this.n1 = num(1), this.icon = h("span"), this.heading = h("span"), this.range),
       this.graph,
       h("div", {class: "timerow"}, this.time, this.bpm),
       h("div", {class: "nudge"}, nudges.map(([t, d]) => h("button", {class: "ghost", onclick: () => this.move(d)}, t))),
@@ -864,11 +884,14 @@ const PulsePage = {
     this._shownHc = null;
   },
   async update() {
-    const hr = S.hr;
-    if (!hr) return;
-    if (!this.data || this.data.id !== hr.id) {
-      const r = await fetch(url("/api/pulse", {}));
+    const hr = S.hr, kind = clockKind();
+    if (!hr || !kind) return;
+    if (!this.data || this.data.id !== hr.id || this.data.kind !== kind) {
+      const r = await fetch(url("/api/sync", {}));
       this.data = await r.json();
+      const speed = this.data.kind === "speed";
+      this.icon.innerHTML = speed ? "⛰️" : HEART_SVG(16, "#2a2a22");
+      this.heading.textContent = speed ? "Din fart från klockan" : "Din puls från klockan";
       this.t = S.fitStart ?? this.data.suggestion;
       this.range.textContent = `${day(hr.start)} · ${clock(hr.start, false)}–${clock(hr.end, false)}`;
       this.draw();
@@ -876,12 +899,12 @@ const PulsePage = {
     const key = `${S.hcSync}|${S.flip}`;
     if (this._shownHc !== key && S.hc) {
       this._shownHc = key;
-      this.hcTxt.innerHTML = `Du markerade starten vid <b>${fmt(S.hcSync || 0)}</b> i filmen. Pulsen ska börja där.`;
+      this.hcTxt.innerHTML = `Du markerade starten vid <b>${fmt(S.hcSync || 0)}</b> i filmen. Klockans kurva ska börja där.`;
       requestAnimationFrame(() => { const [w, hh] = px(this.hcImg.parentNode); this.hcLoader.request(S.hcSync || 0, w, hh); });
     }
     this._labels();
   },
-  at(t) {  // pulsen vid tiden t (linjärt), null i glapp
+  at(t) {  // pulsen (eller farten) vid tiden t (linjärt), null i glapp
     const d = this.data, f = (t - d.start) / d.step, i = Math.floor(f);
     const a = d.values[i], b = d.values[Math.min(i + 1, d.values.length - 1)];
     if (a === null || a === undefined) return null;
@@ -899,31 +922,55 @@ const PulsePage = {
     if (!hr || !d) return;
     const [x0, y0, pw, ph, W, H] = this.plot();
     svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-    let lo = hr.min, hi = hr.max;
-    const grid = hi - lo < 60 ? 20 : 40;
-    this.lo = lo - 8; this.hi = hi + 8;
+    const speed = d.kind === "speed";
     let out = "";
-    for (let v = (Math.floor(this.lo / grid) + 1) * grid; v < this.hi; v += grid) {
+    const gridLine = (v, label) => {
       const y = this.y(v);
       out += `<line x1="${x0}" x2="${x0 + pw}" y1="${y}" y2="${y}" stroke="#3a3a3a"/>` +
-             `<text x="${x0 - 8}" y="${y + 4}" text-anchor="end">${v}</text>`;
+             `<text x="${x0 - 8}" y="${y + 4}" text-anchor="end">${label}</text>`;
+    };
+    if (speed) {
+      // Farten i m/s, uppåt = snabbare. Linjerna märks med min/km som i videon.
+      const top = Math.max(...d.values.filter((v) => v !== null), d.fast, 1);
+      this.lo = 0; this.hi = top * 1.08;
+      for (const pace of [3, 4, 6, 10, 20]) {
+        const v = 1000 / (pace * 60);
+        if (v < this.hi * 0.97 && v > this.hi * 0.06) gridLine(v, `${pace}:00`);
+      }
+      out += `<text x="6" y="${y0 - 18}" style="font-size:11px">min/km</text>`;
+    } else {
+      const lo = hr.min, hi = hr.max, grid = hi - lo < 60 ? 20 : 40;
+      this.lo = lo - 8; this.hi = hi + 8;
+      for (let v = (Math.floor(this.lo / grid) + 1) * grid; v < this.hi; v += grid) gridLine(v, v);
     }
     const step = hr.duration <= 1800 ? 300 : (hr.duration <= 5400 ? 600 : 1200);
     for (let t = (Math.floor(hr.start / step) + 1) * step; t < hr.end; t += step)
       out += `<text x="${this.x(t)}" y="${y0 + ph + 20}" text-anchor="middle">${clock(t, false)}</text>`;
     // Kurvan; glapp (klockan pausad) bryter linjen.
-    let path = "", pen = false;
-    d.values.forEach((v, i) => {
-      if (v === null) { pen = false; return; }
-      const t = d.start + i * d.step;
-      path += `${pen ? "L" : "M"}${this.x(t).toFixed(1)} ${this.y(v).toFixed(1)}`;
-      pen = true;
-    });
-    out += `<path d="${path}" fill="none" stroke="#ff5a6a" stroke-width="2" stroke-linejoin="round"/>`;
+    if (speed) {
+      // Färgad efter farten som i videon: blå = långsamt, röd = snabbt.
+      const col = (v) => `hsl(${Math.round(230 * (1 - Math.max(0, Math.min(1, (v - d.slow) / Math.max(0.01, d.fast - d.slow)))))},95%,55%)`;
+      for (let i = 0; i < d.values.length - 1; i++) {
+        const a = d.values[i], b = d.values[i + 1];
+        if (a === null || b === null) continue;
+        const t = d.start + i * d.step;
+        out += `<line x1="${this.x(t).toFixed(1)}" y1="${this.y(a).toFixed(1)}" x2="${this.x(t + d.step).toFixed(1)}" ` +
+               `y2="${this.y(b).toFixed(1)}" stroke="${col((a + b) / 2)}" stroke-width="2.2" stroke-linecap="round"/>`;
+      }
+    } else {
+      let path = "", pen = false;
+      d.values.forEach((v, i) => {
+        if (v === null) { pen = false; return; }
+        const t = d.start + i * d.step;
+        path += `${pen ? "L" : "M"}${this.x(t).toFixed(1)} ${this.y(v).toFixed(1)}`;
+        pen = true;
+      });
+      out += `<path d="${path}" fill="none" stroke="#ff5a6a" stroke-width="2" stroke-linejoin="round"/>`;
+    }
     const sx = this.x(d.suggestion), sv = this.at(d.suggestion) ?? this.lo;
     const sy = Math.min(y0 + ph - 10, this.y(sv) + 30);
     const right = sx > x0 + pw - 220;
-    out += `<text x="${sx + (right ? -8 : 8)}" y="${sy}" text-anchor="${right ? "end" : "start"}" style="fill:#f2c94c;font-size:13px">↑ Förslag: pulsen stiger här</text>`;
+    out += `<text x="${sx + (right ? -8 : 8)}" y="${sy}" text-anchor="${right ? "end" : "start"}" style="fill:#f2c94c;font-size:13px">↑ Förslag: ${speed ? "farten ökar" : "pulsen stiger"} här</text>`;
     out += `<g id="cursor"></g>`;
     svg.innerHTML = out;
     this._cursor();
@@ -955,7 +1002,11 @@ const PulsePage = {
     if (!this.data) return;
     this.time.textContent = clock(this.t);
     const v = this.at(this.t);
-    this.bpm.innerHTML = "♥ " + (v ? `${Math.round(v)} slag/min` : "–");
+    if (this.data.kind === "speed") {
+      // min/km som i videon; står man nästan still (långsammare än 30 min/km): –
+      const sec = v && v >= 1000 / 1800 ? Math.round(1000 / v) : null;
+      this.bpm.textContent = "⛰️ " + (sec ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")} min/km` : "–");
+    } else this.bpm.innerHTML = "♥ " + (v ? `${Math.round(v)} slag/min` : "–");
     if (S.fitStart === null) {
       this.markBtn.className = "big"; this.markBtn.innerHTML = TRI + "<span>Starten är här</span>";
       this.status.textContent = "Inte markerad än";
@@ -1420,10 +1471,11 @@ function refresh() {
   ul.innerHTML = "";
   PAGES.forEach((p, j) => {
     if (!isActive(j)) return;
-    if (p === PulsePage && current < PAGES.indexOf(SyncPage)) return;  // "Synka pulsen" syns först från steg 2
+    if (p === PulsePage && current < PAGES.indexOf(SyncPage)) return;  // "Synka pulsen/farten" syns först från steg 2
     const state = j === current ? "active" : (j < current ? "done" : "todo");
     const ring = p.sub ? null : h("span", {class: "ctrl"}, state === "done" ? "✓" : p.number);
-    const name = p.sub && state === "done" ? "✓ " + NAMES[j].replace(/^\S+ /, "") : NAMES[j];
+    const label = p.navName || NAMES[j];
+    const name = p.sub && state === "done" ? "✓ " + label.replace(/^\S+ /, "") : label;
     ul.append(h("li", {class: `${state}${p.sub ? " sub" : ""}${canJump(j) ? "" : " locked"}`,
       onclick: () => canJump(j) && show(j)}, ring, name));
   });

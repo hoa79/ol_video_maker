@@ -139,6 +139,40 @@ class WebAppTest(unittest.TestCase):
         data = json.loads(self.get("/api/terrain")[2])
         self.assertEqual(len(data["alt"]), len(data["speed"]))
         self.assertFalse(s["terrainOn"])          # inte synkat än
+        # Synken följer valet: farten vid höjd och fart, pulsen vid puls.
+        sync = json.loads(self.get("/api/sync")[2])
+        self.assertEqual(sync["kind"], "speed")
+        self.assertLessEqual(sync["slow"], sync["fast"])
+        self.post("set_under", {"what": "pulse"})
+        sync = json.loads(self.get("/api/sync")[2])
+        self.assertEqual(sync["kind"], "pulse")
+        self.assertEqual(sync["values"][0], 150)
+        self.post("remove_fit", {})
+        self.post("set_under", {"what": "none"})
+
+    def test_terrain_when_fit_has_no_pulse(self):
+        from ol_video_maker.fitfile import write_fit
+        folder = tempfile.mkdtemp()
+        fit = os.path.join(folder, "gps.fit")
+        t0 = 1795888000
+        write_fit(fit, [(t0 + s, 0) for s in range(120)],
+                  [(30 + s * 0.2, 2.0 + (s % 60) / 30) for s in range(120)])
+        self.post("set_under", {"what": "pulse"})
+        self.post("load_fit", {"file": fit})
+        for _ in range(100):
+            s = json.loads(self.get("/api/state")[2])
+            if s["hr"]:
+                break
+            threading.Event().wait(0.1)
+        self.assertFalse(s["hr"]["hasPulse"])
+        self.assertIsNone(s["hr"]["min"])
+        self.assertEqual(s["under"], "terrain")   # filen saknar puls: höjd och fart väljs
+        self.assertEqual(json.loads(self.get("/api/sync")[2])["kind"], "speed")
+        self.post("set_under", {"what": "pulse"})
+        self.post("mark", {"what": "fit", "t": t0 + 10})
+        s = json.loads(self.get("/api/state")[2])
+        self.assertFalse(s["pulse"])              # ingen puls att visa
+        self.assertEqual(json.loads(self.get("/api/sync")[2]), {})
         self.post("remove_fit", {})
         self.post("set_under", {"what": "none"})
 

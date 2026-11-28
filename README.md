@@ -15,7 +15,7 @@ Texten "Karta: Livelox" visar var källan anges i en riktig video.
 
 | | |
 |---|---|
-| **1. Välj filmer** och, om du vill, pulsfilen från klockan<br>![Steg 1: välj filmer](docs/bilder/steg1_valj_filmer.jpg) | **2. Synka starten:** visa var starten är i båda filmerna<br>![Steg 2: synka starten](docs/bilder/steg2_synka_starten.jpg) |
+| **1. Välj filmer** och, om du vill, filen från klockan<br>![Steg 1: välj filmer](docs/bilder/steg1_valj_filmer.jpg) | **2. Synka starten:** visa var starten är i båda filmerna<br>![Steg 2: synka starten](docs/bilder/steg2_synka_starten.jpg) |
 | **2. Synka pulsen:** programmet föreslår var loppet startar<br>![Steg 2: synka pulsen](docs/bilder/steg2_synka_pulsen.jpg) | **3. Välj målgång:** var videon ska sluta<br>![Steg 3: välj målgång](docs/bilder/steg3_malgang.jpg) |
 | **4. Titta på provbit:** kolla att kartan följer med<br>![Steg 4: provbit](docs/bilder/steg4_provbit.jpg) | **5. Skapa videon:** välj Full HD eller 4K och tryck på knappen<br>![Steg 5: klart](docs/bilder/steg5_klar.jpg) |
 

@@ -52,6 +52,31 @@ class TerrainReading(unittest.TestCase):
         write_fit(path, [(T0 + s, 140) for s in range(60)])
         self.assertIsNone(load_fit(path).terrain)
 
+    def test_file_without_pulse_still_has_terrain(self):
+        # Klocka utan pulsmätning (puls 0 = saknas): höjd och fart går ändå att använda.
+        path = os.path.join(self.dir, "gps.fit")
+        hr, ter = hilly()
+        write_fit(path, [(t, 0) for t, _ in hr], ter)
+        data = load_fit(path)
+        self.assertFalse(data.has_pulse)
+        self.assertIsNotNone(data.terrain)
+        self.assertEqual(data.start, T0)
+        self.assertIsNone(data.at(T0 + 10))
+        self.assertEqual(data.window(T0, T0 + 10), (None, None))
+
+    def test_file_without_pulse_or_gps(self):
+        path = os.path.join(self.dir, "tom.fit")
+        write_fit(path, [(T0 + s, 0) for s in range(60)])
+        with self.assertRaises(VideoMakerError):
+            load_fit(path)
+
+    def test_suggest_start_from_speed(self):
+        # Går lugnt till start (1,2 m/s) och springer sedan (3 m/s) från 600 s.
+        for start in (300, 600, 900):
+            speeds = [1.2 if s < start else 3.0 for s in range(1500)]
+            ter = Terrain([T0 + s for s in range(1500)], [50.0] * 1500, speeds)
+            self.assertLess(abs(ter.suggest_start() - (T0 + start)), 30, start)
+
     def test_plain_altitude_and_speed_fields(self):
         # Äldre klockor: altitude (fält 2) och speed (fält 6) som uint16.
         body = bytearray([0x40, 0, 0]) + struct.pack("<H", 20) + bytes([3])

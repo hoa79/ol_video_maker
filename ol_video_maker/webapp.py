@@ -10,7 +10,8 @@ Guiden har fem steg:
 1. Välj filmer (och frivilligt vad som visas under filmen: puls, höjd och fart eller placering)
    1b. Placering (bara om man valt placering): klistra in sträcktider från Livelox
 2. Synka starten (bläddra fram samma ögonblick i båda filmerna)
-   2b. Synka pulsen (bara om man valt puls eller höjd och fart: klockan synkas med pulsen)
+   2b. Synka klockan (bara om man valt puls eller höjd och fart): med puls synkas klockan
+       mot pulskurvan, med höjd och fart mot fartkurvan
 3. Välj slutet
 4. Titta på en provbit
 5. Skapa videon
@@ -51,7 +52,7 @@ from . import splits as splitmod
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 GUIDE_URL = "https://github.com/hoa79/ol_video_maker/blob/main/docs/GUIDE.md"
-FIT_TYPES = [("Pulsfil från klockan", "*.fit *.FIT *.zip *.ZIP"), ("Alla filer", "*.*")]
+FIT_TYPES = [("Fil från klockan", "*.fit *.FIT *.zip *.ZIP"), ("Alla filer", "*.*")]
 VIDEO_TYPES = [("Videofiler", "*.mp4 *.MP4 *.mov *.MOV *.mkv *.webm *.avi"), ("Alla filer", "*.*")]
 LEAD_IN = 5.0          # sekunder före starten som tas med i videon
 PREVIEW_SECONDS = 20   # längd på provvideor
@@ -295,7 +296,9 @@ class State:
             hr_info = None
             if hr is not None:
                 hr_info = {"id": self.hr_id, "name": hr.name, "start": hr.start, "end": hr.end,
-                           "duration": hr.duration, "min": min(hr.bpm), "max": max(hr.bpm),
+                           "duration": hr.duration, "hasPulse": hr.has_pulse,
+                           "min": min(hr.bpm) if hr.bpm else None,
+                           "max": max(hr.bpm) if hr.bpm else None,
                            "minutes": max(1, round(hr.duration / 60)),
                            "terrain": self._terrain_info()}
             return {
@@ -331,7 +334,7 @@ class State:
         return max(0.0, end - max(0.0, self.hc_sync - LEAD_IN))
 
     def pulse_track(self) -> Optional[PulseTrack]:
-        if self.under != "pulse" or self.hr is None or self.fit_start is None or self.hc_sync is None or not self.hc_tl:
+        if self.under != "pulse" or self.hr is None or not self.hr.has_pulse or self.fit_start is None or self.hc_sync is None or not self.hc_tl:
             return None
         end = self.end_time if self.end_time is not None else self.hc_tl.duration
         return PulseTrack(self.hr, offset=self.fit_start - self.hc_sync,
@@ -481,7 +484,7 @@ class State:
         return {}
 
     def pick_fit(self, _body) -> Dict[str, Any]:
-        files = self.dialogs.call(lambda tk: ask_open(tk, "Välj pulsfil från klockan", FIT_TYPES))
+        files = self.dialogs.call(lambda tk: ask_open(tk, "Välj fil från klockan", FIT_TYPES))
         if files:
             self.load_fit({"file": files[0]})
         return {}
@@ -508,8 +511,10 @@ class State:
                     self.hr_id += 1
                     self.fit_start = None
                     # En ny fil från klockan: visa pulsen under videon, eller höjd och fart om
-                    # det var valt och filen har dem.
-                    if not (self.under == "terrain" and hr.terrain is not None):
+                    # det var valt och filen har dem (eller om filen saknar puls).
+                    if hr.terrain is not None and (self.under == "terrain" or not hr.has_pulse):
+                        self.under = "terrain"
+                    else:
                         self.under = "pulse"
         threading.Thread(target=work, daemon=True).start()
         return {}
@@ -964,6 +969,30 @@ class State:
                     "values": [None if v is None else round(v, 1) for v in vals],
                     "suggestion": hr.suggest_start()}
 
+    def sync_series(self) -> Dict[str, Any]:
+        """Kurvan som klockan synkas mot: farten när höjd och fart är valt, annars pulsen."""
+        with self.lock:
+            hr = self.hr
+            if hr is None:
+                return {}
+            ter = hr.terrain
+            if self.under == "terrain" and ter is not None:
+                kind = "speed"
+            elif self.under in ("pulse", "terrain") and hr.has_pulse:
+                kind = "pulse"
+            else:
+                return {}
+        if kind == "pulse":
+            return dict(self.pulse_series(), kind="pulse")
+        step = max(1.0, hr.duration / 1500)
+        n = int(hr.duration / step) + 1
+        vals = [ter.speed_at(hr.start + i * step) for i in range(n)]
+        window = ter.window(hr.start, hr.end)
+        return {"id": self.hr_id, "kind": "speed", "start": hr.start, "step": step,
+                "values": [None if v is None else round(v, 3) for v in vals],
+                "slow": window[2] if window else 0.0, "fast": window[3] if window else 1.0,
+                "suggestion": ter.suggest_start()}
+
     def terrain_series(self) -> Dict[str, Any]:
         """Höjd och fart för förhandsbilden i steg 4 (högst ca 1500 punkter)."""
         with self.lock:
@@ -1118,6 +1147,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self.server.state.snapshot())
         if u.path == "/api/pulse":
             return self._json(self.server.state.pulse_series())
+        if u.path == "/api/sync":
+            return self._json(self.server.state.sync_series())
         if u.path == "/api/terrain":
             return self._json(self.server.state.terrain_series())
         if u.path == "/api/placing_svg":

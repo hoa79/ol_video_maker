@@ -22,7 +22,7 @@ import struct
 import time
 import zipfile
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from .core import VideoMakerError
 
@@ -212,6 +212,51 @@ def _smooth(vals: List[float], times: List[float], half: float) -> List[float]:
     return out
 
 
+def suggest_rise(t_start: float, t_end: float, value_at: Callable[[float], Optional[float]],
+                 tolerance: float = 0.0, walk_back: bool = True) -> float:
+    """Gissa när loppet startade i en kurva (puls eller fart): där den stiger brantast och
+    håller sig hög.
+
+    Vi jämför medelvärdet de närmaste två minuterna efter varje tidpunkt med de två minuterna
+    före, tar den tidpunkt där skillnaden är störst och går sedan bakåt till där stigningen
+    började (pulsen släpar efter, farten gör det inte: walk_back=False). tolerance: hur mycket
+    kurvan får gå upp när vi går bakåt (i kurvans enhet)."""
+    step = 5.0
+    n0 = max(1, int((t_end - t_start) / step) + 1)
+    series = [value_at(t_start + k * step) for k in range(n0)]
+    vals = [v for v in series if v is not None]
+    if len(vals) < 4:
+        return t_start
+    filled, last = [], vals[0]
+    for v in series:
+        last = v if v is not None else last
+        filled.append(last)
+    w = max(2, int(120 / step))
+    n = len(filled)
+    pre = [0.0]
+    for v in filled:
+        pre.append(pre[-1] + v)
+
+    def mean(a: int, b: int) -> float:
+        a, b = max(0, a), min(n, b)
+        return (pre[b] - pre[a]) / (b - a) if b > a else filled[min(a, n - 1)]
+
+    best_i, best = 0, float("-inf")
+    for i in range(1, n - 1):
+        score = mean(i, i + w) - mean(i - w, i)
+        if score > best:
+            best_i, best = i, score
+    # Gå bakåt så länge kurvan fortfarande sjunker (högst två minuter): där började ökningen.
+    i = best_i
+    if not walk_back:
+        return t_start + i * step
+    smooth = [mean(k - 1, k + 2) for k in range(n)]
+    lim = max(0, best_i - w)
+    while i > lim and smooth[i - 1] <= smooth[i] + tolerance:
+        i -= 1
+    return t_start + i * step
+
+
 @dataclass
 class Terrain:
     """Höjd (meter över havet) och fart (m/s) från klockan, utjämnade."""
@@ -244,6 +289,14 @@ class Terrain:
         f = (t - t0) / (t1 - t0) if t1 > t0 else 0.0
         return (self.alt[i - 1] + f * (self.alt[i] - self.alt[i - 1]),
                 self.speed[i - 1] + f * (self.speed[i] - self.speed[i - 1]))
+
+    def speed_at(self, t: float) -> Optional[float]:
+        v = self.at(t)
+        return None if v is None else v[1]
+
+    def suggest_start(self) -> float:
+        """Gissa när loppet startade: där farten ökar mest och håller sig hög."""
+        return suggest_rise(self.times[0], self.times[-1], self.speed_at, walk_back=False)
 
     def window(self, t0: float, t1: float) -> Optional[Tuple[float, float, float, float]]:
         """(lägsta höjd, högsta höjd, långsam fart, snabb fart) mellan t0 och t1. Farten tas
@@ -288,10 +341,10 @@ class HeartRate:
         return self.end - self.start
 
     def at(self, t: float) -> Optional[float]:
-        """Pulsen vid tiden t (linjärt mellan mätvärdena). None utanför mätningen eller i
-        långa glapp (klockan pausad)."""
+        """Pulsen vid tiden t (linjärt mellan mätvärdena). None utanför mätningen, i långa
+        glapp (klockan pausad) eller om filen saknar puls."""
         ts = self.times
-        if not ts or t < ts[0] or t > ts[-1]:
+        if not self.bpm or not ts or t < ts[0] or t > ts[-1]:
             return None
         i = bisect.bisect_right(ts, t)
         if i >= len(ts):
@@ -312,43 +365,13 @@ class HeartRate:
         n = max(1, int((t1 - t0) / step) + 1)
         return [self.at(t0 + k * step) for k in range(n)]
 
+    @property
+    def has_pulse(self) -> bool:
+        return bool(self.bpm)
+
     def suggest_start(self) -> float:
-        """Gissa när loppet startade: där pulsen stiger brantast och håller sig hög.
-
-        Vi jämför medelpulsen de närmaste två minuterna efter varje tidpunkt med de två
-        minuterna före, tar den tidpunkt där skillnaden är störst och går sedan bakåt till
-        där stigningen började."""
-        step = 5.0
-        series = self.resample(self.start, self.end, step)
-        vals = [v for v in series if v is not None]
-        if len(vals) < 4:
-            return self.start
-        filled, last = [], vals[0]
-        for v in series:
-            last = v if v is not None else last
-            filled.append(last)
-        w = max(2, int(120 / step))
-        n = len(filled)
-        pre = [0.0]
-        for v in filled:
-            pre.append(pre[-1] + v)
-
-        def mean(a: int, b: int) -> float:
-            a, b = max(0, a), min(n, b)
-            return (pre[b] - pre[a]) / (b - a) if b > a else filled[min(a, n - 1)]
-
-        best_i, best = 0, float("-inf")
-        for i in range(1, n - 1):
-            score = mean(i, i + w) - mean(i - w, i)
-            if score > best:
-                best_i, best = i, score
-        # Gå bakåt så länge pulsen fortfarande sjunker (högst två minuter): där började ökningen.
-        i = best_i
-        smooth = [mean(k - 1, k + 2) for k in range(n)]
-        lim = max(0, best_i - w)
-        while i > lim and smooth[i - 1] <= smooth[i] + 0.5:
-            i -= 1
-        return self.start + i * step
+        """Gissa när loppet startade: där pulsen stiger brantast och håller sig hög."""
+        return suggest_rise(self.start, self.end, self.at, tolerance=0.5)
 
     def clock(self, t: float, seconds: bool = True) -> str:
         """Klocktid (datorns tidszon), t.ex. 18:02:13."""
@@ -379,11 +402,15 @@ def load_fit(path: str) -> HeartRate:
         raise VideoMakerError(f"Kunde inte öppna filen {name}.")
     all_samples = read_samples(data, name)
     samples = [(smp.t, smp.hr) for smp in all_samples if smp.hr]
+    terrain = Terrain.from_samples(all_samples)
     if len(samples) < 10:
+        if terrain is not None:
+            # Klocka utan pulsmätning: höjd och fart (GPS) går ändå att visa.
+            return HeartRate(list(terrain.times), [], name, terrain)
         raise VideoMakerError(
-            f"Filen {name} innehåller ingen puls. Hade du pulsmätningen på under loppet?")
-    return HeartRate([float(t) for t, _ in samples], [v for _, v in samples], name,
-                     Terrain.from_samples(all_samples))
+            f"Filen {name} innehåller varken puls eller GPS. Hade klockan pulsmätning eller "
+            "GPS på under loppet?")
+    return HeartRate([float(t) for t, _ in samples], [v for _, v in samples], name, terrain)
 
 
 def write_fit(path: str, samples: Sequence[Tuple[float, int]],
