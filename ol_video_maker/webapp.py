@@ -7,7 +7,8 @@ bibliotek behövs: servern är Pythons egen http.server, och filväljarna är Wi
 (via tkinter som redan följer med Python).
 
 Guiden har fem steg:
-1. Välj filmer (och frivilligt pulsfilen från klockan)
+1. Välj filmer (och frivilligt vad som visas under filmen: puls eller placering)
+   1b. Placering (bara om man valt placering): klistra in sträcktider från Livelox
 2. Synka starten (bläddra fram samma ögonblick i båda filmerna)
    2b. Synka pulsen (bara om man valt en pulsfil)
 3. Välj slutet
@@ -43,7 +44,9 @@ from .core import (DEFAULT_LIVELOX_WIDTH, OUT_W, Job, MediaInfo, VideoMakerError
 from .filedialogs import ask_open, ask_save
 from .fitfile import HeartRate, load_fit
 from .frames import Timeline, grab_frame, mjpeg_command
+from .placing_video import PlacingTrack, svg_at
 from .pulse_video import PulseTrack
+from . import splits as splitmod
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 GUIDE_URL = "https://github.com/hoa79/ol_video_maker/blob/main/docs/GUIDE.md"
@@ -238,6 +241,15 @@ class State:
         self.hr: Optional[HeartRate] = None
         self.hr_id = 0
         self.fit_start: Optional[float] = None
+        # Fältet under videon räcker till en sak: "none", "pulse" eller "placing".
+        self.under = "none"
+        # Placeringen: inklistrade sträcktider (bara i minnet), vem du är och vilka som syns.
+        self.splits_text = ""
+        self.splits: Optional[splitmod.Splits] = None
+        self.splits_id = 0
+        self.me: Optional[str] = None       # ditt namn, "" = Ingen (visa bara linjen)
+        self.shown: List[str] = []          # namnen på dem som syns (utom du)
+        self.consent = False                # får inte vara förifylld (juristen)
         self.hc_flip = False
         self.livelox_width = DEFAULT_LIVELOX_WIDTH
         self.output = ""
@@ -282,6 +294,8 @@ class State:
                 "lwMin": LW_MIN, "lwMax": LW_MAX, "outW": OUT_W,
                 "hr": hr_info, "fitStart": self.fit_start,
                 "pulse": self.pulse_track() is not None,
+                "under": self.under, "placingOn": self.placing_track() is not None,
+                "placing": self.placing_info(),
                 "videoLength": self.video_length(), "leadIn": LEAD_IN,
                 "previewSeconds": PREVIEW_SECONDS,
                 "output": self.output, "quality": self.quality,
@@ -299,18 +313,60 @@ class State:
         return max(0.0, end - max(0.0, self.hc_sync - LEAD_IN))
 
     def pulse_track(self) -> Optional[PulseTrack]:
-        if self.hr is None or self.fit_start is None or self.hc_sync is None or not self.hc_tl:
+        if self.under != "pulse" or self.hr is None or self.fit_start is None or self.hc_sync is None or not self.hc_tl:
             return None
         end = self.end_time if self.end_time is not None else self.hc_tl.duration
         return PulseTrack(self.hr, offset=self.fit_start - self.hc_sync,
                           graph_start=max(0.0, self.hc_sync - LEAD_IN), graph_end=end)
+
+    # --- placeringen ---
+    def _index(self, name: Optional[str]) -> Optional[int]:
+        if not name or self.splits is None:
+            return None
+        for i, r in enumerate(self.splits.runners):
+            if r.name == name:
+                return i
+        return None
+
+    def _shown_idx(self) -> List[int]:
+        out = [i for i in (self._index(n) for n in self.shown) if i is not None
+               and self.splits.runners[i].selectable]
+        me = self._index(self.me)
+        return [i for i in out if i != me]
+
+    def placing_track(self) -> Optional[PlacingTrack]:
+        if self.under != "placing" or self.splits is None or self.hc_sync is None:
+            return None
+        me = self._index(self.me)
+        shown = self._shown_idx()
+        if me is None and not shown:
+            return None
+        if me is not None and not self.splits.runners[me].selectable:
+            me = None
+        return PlacingTrack(self.splits, shown, me, self.consent, race_start=self.hc_sync)
+
+    def placing_info(self) -> Optional[Dict[str, Any]]:
+        sp = self.splits
+        if sp is None:
+            return {"id": self.splits_id, "text": self.splits_text, "runners": [], "me": self.me,
+                    "shown": [], "consent": self.consent, "summary": None,
+                    "saved": splitmod.load_me() is not None, "max": splitmod.MAX_SHOWN}
+        names = splitmod.short_names([r.name for r in sp.runners])
+        runners = [{"name": r.name, "club": r.club, "place": r.place, "time": r.time,
+                    "status": r.status, "selectable": r.selectable, "short": names[i]}
+                   for i, r in enumerate(sp.runners)]
+        return {"id": self.splits_id, "text": self.splits_text, "runners": runners,
+                "me": self.me, "meIndex": self._index(self.me), "shown": self._shown_idx(),
+                "consent": self.consent, "summary": splitmod.summary(sp),
+                "saved": splitmod.load_me() is not None, "max": splitmod.MAX_SHOWN}
 
     def make_job(self, output: str) -> Job:
         return Job(headcam_files=[c.path for c in self.hc_tl.clips],
                    livelox_file=self.ll_tl.clips[0].path, output_file=output,
                    headcam_sync=self.hc_sync or 0.0, livelox_sync=self.ll_sync or 0.0,
                    lead_in=LEAD_IN, end_time=self.end_time, livelox_width=self.livelox_width,
-                   headcam_flip=self.hc_flip, pulse=self.pulse_track())
+                   headcam_flip=self.hc_flip, pulse=self.pulse_track(),
+                   placing=self.placing_track())
 
     # --- åtgärder från sidan ---
     def check_tools(self) -> None:
@@ -419,6 +475,7 @@ class State:
                     self.hr = hr
                     self.hr_id += 1
                     self.fit_start = None
+                    self.under = "pulse"   # en ny pulsfil: visa pulsen under videon
         threading.Thread(target=work, daemon=True).start()
         return {}
 
@@ -428,6 +485,103 @@ class State:
             self.fit_start = None
             self.errors["fit"] = None
         return {}
+
+    def set_under(self, body) -> Dict[str, Any]:
+        what = (body or {}).get("what")
+        if what in ("none", "pulse", "placing"):
+            with self.lock:
+                self.under = what
+        return {}
+
+    def set_splits(self, body) -> Dict[str, Any]:
+        text = str((body or {}).get("text") or "")
+        sp = splitmod.parse(text) if text.strip() else None
+        with self.lock:
+            self.splits_text = text
+            self.splits_id += 1
+            if sp is None or not sp.runners:
+                self.splits = None
+                return {}
+            self.splits = sp
+            names = {r.name for r in sp.runners}
+            if self.me and self.me not in names:
+                self.me = None
+            if self.me is None:
+                saved = splitmod.load_me()
+                if saved in names:
+                    self.me = saved
+            self.shown = [n for n in self.shown if n in names]
+            if not self.shown and self.me is not None:
+                self._preset("top")
+        return {}
+
+    def _preset(self, kind: str) -> None:
+        me = self._index(self.me)
+        idx = splitmod.preset(self.splits, kind, me)
+        self.shown = [self.splits.runners[i].name for i in idx if i != me]
+
+    def set_me(self, body) -> Dict[str, Any]:
+        name = (body or {}).get("name")
+        with self.lock:
+            if self.splits is None:
+                return {}
+            if name == "":
+                self.me = ""
+            elif self._index(name) is not None:
+                self.me = name
+                splitmod.save_me(name)   # bara namnet, på den här datorn
+                self.shown = [n for n in self.shown if n != name]
+                if len(self.shown) > splitmod.MAX_SHOWN - 1:
+                    self.shown = self.shown[:splitmod.MAX_SHOWN - 1]
+            else:
+                return {}
+            if not self.shown:
+                self._preset("top")
+        return {}
+
+    def forget_me(self, _body) -> Dict[str, Any]:
+        splitmod.save_me(None)
+        return {}
+
+    def set_shown(self, body) -> Dict[str, Any]:
+        with self.lock:
+            if self.splits is None:
+                return {}
+            me = self._index(self.me)
+            limit = splitmod.MAX_SHOWN - (1 if me is not None else 0)
+            out: List[str] = []
+            for i in (body or {}).get("shown") or []:
+                i = int(i)
+                if 0 <= i < len(self.splits.runners) and i != me \
+                        and self.splits.runners[i].selectable:
+                    name = self.splits.runners[i].name
+                    if name not in out:
+                        out.append(name)
+            if len(out) > limit:
+                return {"error": {"title": f"Högst {splitmod.MAX_SHOWN} löpare",
+                                  "text": f"Det får plats högst {splitmod.MAX_SHOWN} löpare på "
+                                          "linjen (du räknas med). Ta bort någon först."}}
+            self.shown = out
+        return {}
+
+    def preset_shown(self, body) -> Dict[str, Any]:
+        kind = (body or {}).get("kind")
+        with self.lock:
+            if self.splits is not None and kind in ("top", "near", "club", "clear"):
+                self._preset(kind)
+        return {}
+
+    def set_consent(self, body) -> Dict[str, Any]:
+        self.consent = bool((body or {}).get("on"))
+        return {}
+
+    def placing_svg(self, t: float, lw: int) -> Dict[str, Any]:
+        with self.lock:
+            tr = self.placing_track()
+        if tr is None:
+            return {"svg": ""}
+        lw = max(LW_MIN, min(LW_MAX, lw))
+        return {"svg": svg_at(tr, OUT_W - lw, t - tr.race_start)}
 
     def mark(self, body) -> Dict[str, Any]:
         what, t = body["what"], body.get("t")
@@ -614,7 +768,8 @@ class State:
     def _key(self):
         return (self.hc_sync, self.ll_sync, self.end_time, self.hc_flip, self.livelox_width,
                 tuple(c.path for c in self.hc_tl.clips) if self.hc_tl else (), self.hr_id
-                if self.hr else None, self.fit_start)
+                if self.hr else None, self.fit_start, self.under, self.splits_id,
+                tuple(self.shown), self.me, self.consent)
 
     def bench(self, _body) -> Dict[str, Any]:
         """Mät hur snabbt datorn skapar video genom att göra en kort provbit i varje upplösning."""
@@ -699,7 +854,8 @@ def fmt_estimate(seconds: Optional[float]) -> str:
 ACTIONS = ("pick_headcam", "pick_livelox", "load", "pick_fit", "load_fit", "remove_fit", "mark",
            "set_flip", "set_width", "nudge", "set_quality", "set_output", "pick_output",
            "open_help", "open_output", "preview", "make", "cancel_render", "bench",
-           "accept_terms", "decline_terms")
+           "accept_terms", "decline_terms", "set_under", "set_splits", "set_me", "forget_me",
+           "set_shown", "preset_shown", "set_consent")
 # Det enda som går att göra innan villkoren är godkända (Avsluta sköts av /api/bye).
 BEFORE_TERMS = ("accept_terms", "decline_terms", "open_help")
 
@@ -769,6 +925,13 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self.server.state.snapshot())
         if u.path == "/api/pulse":
             return self._json(self.server.state.pulse_series())
+        if u.path == "/api/placing_svg":
+            try:
+                t = float(q.get("t", ["0"])[0])
+                lw = int(float(q.get("lw", [str(DEFAULT_LIVELOX_WIDTH)])[0]))
+            except ValueError:
+                return self._send(400, b"", "text/plain")
+            return self._json(self.server.state.placing_svg(t, lw))
         if u.path == "/frame":
             return self._frame(q)
         if u.path == "/play":
@@ -990,6 +1153,7 @@ def selftest() -> str:
     check_tools()
     lines.append("ffmpeg och ffprobe startar")
     lines.append(_pulse_selftest())
+    lines.append(_placing_selftest())
     lines.append(f"Guide: {_guide_path()}")
     return "\n".join(lines)
 
@@ -1015,6 +1179,38 @@ def _pulse_selftest() -> str:
         out = os.path.join(folder, "puls.mp4")
         render(Job([clips[0]], clips[1], out, lead_in=0, pulse=PulseTrack(hr, offset=t0)))
         return f"Pulsvideo: {os.path.getsize(out)} byte"
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+# Påhittade löpare och tider för självtestet.
+SELFTEST_SPLITS = (
+    "Pl\tName\tTime\tTime behind\t1\t\t2\t\n"
+    "\tClub\t\t\t300 m\t\t200 m\t\t100 m\t\n"
+    "1\tAnna Exempel\t0:06\t\t0:02\t(1)\t0:02\t(2)\t0:02\t(1)\n"
+    "\tTestklubben\t\t\t0:02\t(1)\t0:04\t(1)\t0:06\t(1)\n"
+    "2\tBo Prov\t0:08\t+0:02\t0:03\t(2)\t0:01\t(1)\t0:04\t(2)\n"
+    "\tTestklubben\t\t\t0:03\t(2)\t0:04\t(1)\t0:08\t(2)\n")
+
+
+def _placing_selftest() -> str:
+    """Gör en kort video med placeringslinjen (ass-filtret, figurerna och sendcmd)."""
+    folder = tempfile.mkdtemp(prefix="olvm_selftest_")
+    try:
+        ffmpeg = find_tool("ffmpeg")
+        clips = []
+        for name, color in (("hc.mp4", "red"), ("ll.mp4", "blue")):
+            path = os.path.join(folder, name)
+            subprocess.run([ffmpeg, "-v", "error", "-y", "-f", "lavfi", "-i",
+                            f"color=c={color}:s=640x360:d=3", "-pix_fmt", "yuv420p", path],
+                           check=True, capture_output=True,
+                           creationflags=CREATE_NO_WINDOW if os.name == "nt" else 0)
+            clips.append(path)
+        sp = splitmod.parse(SELFTEST_SPLITS)
+        track = PlacingTrack(sp, [1], 0, True, race_start=0.0)
+        out = os.path.join(folder, "placering.mp4")
+        render(Job([clips[0]], clips[1], out, lead_in=0, placing=track))
+        return f"Placeringsvideo: {os.path.getsize(out)} byte"
     finally:
         shutil.rmtree(folder, ignore_errors=True)
 

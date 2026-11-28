@@ -486,7 +486,7 @@ const HEART_SVG = (size, color = "#e8344e") =>
 // --- 1. Välj filmer ---
 const FilesPage = {
   number: 1, title: "Välj dina filmer", nextStep: 4, tip: "Klart! Tryck på Nästa.",
-  lead: "Välj filmen från din headcam och filmen du spelade in från Livelox. Pulsfilen från klockan är frivillig.",
+  lead: "Välj filmen från din headcam och filmen du spelade in från Livelox. Du kan också välja vad som visas under filmen.",
   ready() {
     if (!S.hc) return "Välj din headcam-film för att gå vidare.";
     if (!S.ll) return "Välj din Livelox-inspelning för att gå vidare.";
@@ -518,23 +518,40 @@ const FilesPage = {
       this.cards[which] = c;
       row.append(c.el);
     }
-    // 3. Puls från klockan (frivilligt)
+    // 3. Under videon (frivilligt): ingenting, puls eller placering. Fältet räcker till en sak.
     this.p = {};
     const p = this.p;
-    p.desc = h("p", {}, "Visa din puls i videon. Välj filen (.fit) från din Garmin-klocka. Hoppa över om du inte vill.");
+    p.opts = {};
+    const opt = (what, icon, title, sub, disabled) => {
+      const el = h("button", {class: "uopt" + (disabled ? " soon" : ""), disabled,
+        onclick: () => !disabled && api("set_under", {what})},
+        h("span", {class: "radio"}), h("span", {class: "ut"}, h("b", {html: (icon ? icon + " " : "") + title}), h("small", {}, sub)));
+      if (!disabled) p.opts[what] = el;
+      return el;
+    };
+    // Puls: pulsfilen från klockan
     p.status = h("div", {class: "okline"});
     p.facts = h("div", {class: "facts"});
     p.remove = h("button", {class: "ghost lg", onclick: () => api("remove_fit")}, "Ta bort");
     p.pick = h("button", {class: "big", onclick: () => api("pick_fit")}, "Välj pulsfil…");
-    const pulse = h("div", {class: "card pulsecard"},
-      h("span", {class: "num"}, 3),
-      h("div", {class: "heartbox", html: HEART_SVG(34)}),
-      h("div", {class: "pulsemid"},
-        h("h2", {}, "Puls från klockan ", h("span", {class: "tag"}, "Frivilligt")),
-        p.desc, p.status, p.facts,
+    p.pulse = h("div", {class: "udetail"},
+      h("div", {class: "pulsemid"}, p.status, p.facts,
         h("a", {class: "link", onclick: fitHelp}, "Hur hämtar jag .fit-filen från Garmin?")),
       h("div", {class: "btnrow"}, p.remove, p.pick));
-    root.append(row, pulse);
+    // Placering: sträcktider från Livelox (klistras in på nästa sida)
+    p.pstatus = h("div", {class: "okline"});
+    p.pbtn = h("button", {class: "ghost lg", onclick: () => show(PAGES.indexOf(PlacingPage))}, "Ändra urval…");
+    p.placing = h("div", {class: "udetail"}, h("div", {class: "pulsemid"}, p.pstatus), h("div", {class: "btnrow"}, p.pbtn));
+    const under = h("div", {class: "card undercard"},
+      h("h2", {}, h("span", {class: "num"}, 3), "Under videon ", h("span", {class: "tag"}, "Frivilligt")),
+      h("p", {class: "usub"}, "Fältet under headcam-filmen räcker till en sak. Välj vad som ska visas där."),
+      h("div", {class: "uopts"},
+        opt("none", "", "Ingenting", "Bara film och karta"),
+        opt("pulse", HEART_SVG(15), "Puls", ".fit-fil från klockan"),
+        opt("placing", "🏃", "Placering", "Sträcktider från Livelox"),
+        opt("more", "⌚", "Mer från klockan", "Kommer senare", true)),
+      p.pulse, p.placing);
+    root.append(row, under);
     this.shown = {};
   },
   update() {
@@ -572,12 +589,13 @@ const FilesPage = {
       }
     }
     const p = this.p, hr = S.hr, err = S.errors.fit;
-    p.desc.hidden = !!(hr || err || S.loading.fit);
+    for (const [what, el] of Object.entries(p.opts)) el.classList.toggle("on", S.under === what);
+    p.pulse.hidden = S.under !== "pulse";
+    p.placing.hidden = S.under !== "placing";
     if (S.loading.fit) { p.status.className = "okline wait"; p.status.textContent = "Läser filen…"; }
     else if (err) { p.status.className = "okline err"; p.status.textContent = "⚠ " + err; }
     else if (hr) { p.status.className = "okline"; p.status.textContent = "✓ " + hr.name; }
-    else p.status.textContent = "";
-    p.status.hidden = !p.status.textContent;
+    else { p.status.className = "okline wait"; p.status.textContent = "Välj filen (.fit) från din klocka."; }
     p.facts.hidden = !hr;
     if (hr) {
       p.facts.innerHTML = `<span>Start <b>${day(hr.start)} ${clock(hr.start, false)}</b></span>` +
@@ -587,6 +605,149 @@ const FilesPage = {
       p.pick.className = S.hc && S.ll ? "big" : "big second"; p.pick.textContent = "Välj pulsfil…";
     }
     p.remove.hidden = !hr;
+    const pl = S.placing;
+    if (pl && pl.runners.length) {
+      const n = pl.shown.length + (pl.meIndex !== null && pl.meIndex !== undefined ? 1 : 0);
+      p.pstatus.className = "okline";
+      p.pstatus.textContent = `✓ Sträcktider inklistrade · ${n} löpare valda`;
+      p.pbtn.textContent = "Ändra urval…";
+    } else {
+      p.pstatus.className = "okline wait";
+      p.pstatus.textContent = "Du klistrar in sträcktiderna från Livelox på nästa sida.";
+      p.pbtn.textContent = "Klistra in sträcktider…";
+    }
+    p.remove.hidden = !hr;
+  },
+};
+
+// --- 1b. Placering (bara om man valt Placering under videon) ---
+const SPLIT_STEPS = [
+  "Öppna loppet i Livelox och välj din klass.",
+  "Öppna sträcktiderna (Split times / Sträcktider).",
+  "Markera hela tabellen med musen, från rubriken \"Pl\" till sista raden. Eller klicka i tabellen och tryck Ctrl + A.",
+  "Kopiera med Ctrl + C.",
+  "Klicka i rutan här i programmet och klistra in med Ctrl + V.",
+];
+function splitsHelp() {
+  stepsModal("Kopiera sträcktiderna från Livelox",
+    "Programmet läser tabellen du kopierar. Den sparas bara här på din dator och skickas inte någonstans.",
+    SPLIT_STEPS, "Programmet hämtar aldrig något från Livelox själv. Ange Livelox som källa när du lägger ut videon.");
+}
+function fmtRace(sec) {
+  if (sec === null || sec === undefined) return "";
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+}
+const STATUS_TEXT = {mp: "felstämplad", dns: "ej start", "ej start": "ej start", dnf: "bröt", "bröt": "bröt", dsq: "diskad", disk: "diskad"};
+
+const PlacingPage = {
+  number: 1, kicker: "Steg 1 av 5 · Placering", optional: true, sub: true, nextStep: 4,
+  title: "Visa placeringen under loppet",
+  lead: "Klistra in sträcktiderna från Livelox. Då syns du och de du väljer som prickar på en linje från start till mål.",
+  active: () => S.under === "placing",
+  ready: () => null,
+  hint() {
+    const pl = S.placing;
+    if (!pl || !pl.runners.length) return "Du kan hoppa över det här. Då syns ingen placering i videon.";
+    if (pl.me === null) return "Välj vem du är i 2, eller välj Ingen.";
+    return "Kolumnen till höger visar hur namnet skrivs i videon.";
+  },
+  build(root) {
+    const send = () => { clearTimeout(this._tt); this._tt = setTimeout(() => api("set_splits", {text: this.ta.value}), 250); };
+    this.ta = h("textarea", {class: "paste", spellcheck: "false", placeholder: "Klistra in här\n(Ctrl + V)", oninput: send});
+    this.ok = h("div", {class: "okline"});
+    this.help = h("a", {class: "link", onclick: splitsHelp}, "Hur kopierar jag sträcktiderna från Livelox?");
+    this.sel = h("select", {class: "mesel", onchange: () => api("set_me", {name: this.sel.value === "__ingen__" ? "" : this.sel.value})});
+    this.meHelp = h("p", {class: "small"});
+    this.forget = h("a", {class: "textlink", onclick: () => api("forget_me")}, "Glöm mitt namn");
+    this.h2 = h("h2", {}, h("span", {class: "num"}, 2), "Vem är du?");
+    this.chips = {};
+    const chip = (kind, text) => (this.chips[kind] = h("button", {class: "chip", onclick: () => api("preset_shown", {kind})}, text));
+    this.count = h("span", {class: "count"});
+    this.list = h("div", {class: "plist"});
+    this.cbox = h("input", {type: "checkbox", id: "consent", onchange: () => api("set_consent", {on: this.cbox.checked})});
+    this.consent = h("label", {class: "consent", for: "consent"}, this.cbox, h("span", {class: "cb"}),
+      h("div", {}, h("b", {}, "De jag visar med namn vet om det och tycker att det är okej."), this.consentSub = h("small")));
+    this.right = h("div", {class: "card pcol"},
+      h("h2", {}, h("span", {class: "num"}, 3), "Välj vilka som syns", this.count),
+      h("div", {class: "chips"}, chip("top", "Topp 5 + du"), chip("near", "Närmast dig"), chip("club", "Din klubb"), chip("clear", "Rensa")),
+      this.list, this.consent);
+    this.left = h("div", {class: "card pcol pleft"},
+      h("h2", {}, h("span", {class: "num"}, 1), "Klistra in sträcktiderna"),
+      this.ta, this.ok, this.help, this.h2, this.sel, this.meHelp, this.forget);
+    root.append(h("div", {class: "row grow"}, this.left, this.right));
+    this.shownId = null;
+  },
+  update() {
+    const pl = S.placing || {runners: [], shown: []};
+    if (document.activeElement !== this.ta && this.ta.value !== pl.text) this.ta.value = pl.text;
+    const has = pl.runners.length > 0, sm = pl.summary;
+    this.ta.classList.toggle("empty", !this.ta.value);
+    if (has) {
+      const extra = [];
+      if (sm.mp) extra.push(`${sm.mp} ${sm.mp === 1 ? "felstämplad" : "felstämplade"}`);
+      if (sm.dns) extra.push(`${sm.dns} ej ${sm.dns === 1 ? "startad" : "startade"}`);
+      this.ok.className = "okline";
+      this.ok.innerHTML = `✓ ${sm.runners} löpare och ${sm.controls} kontroller hittade` +
+        (extra.length ? `<small>${esc(extra.join(" och "))} finns längst ned i listan.</small>` : "");
+    } else if (this.ta.value.trim()) {
+      this.ok.className = "okline err";
+      this.ok.textContent = "⚠ Hittade inga sträcktider. Kopiera hela tabellen i Livelox, med rubrikerna.";
+    } else this.ok.textContent = "";
+    this.ok.hidden = !this.ok.textContent;
+    for (const el of [this.h2, this.sel, this.meHelp, this.right]) el.classList.toggle("dim", !has);
+    this.sel.disabled = !has;
+    // Vem är du?
+    const key = `${pl.id}|${pl.me}`;
+    if (this._selKey !== key) {
+      this._selKey = key;
+      this.sel.innerHTML = "";
+      this.sel.append(h("option", {value: "", disabled: true, selected: pl.me === null}, "Välj ditt namn"));
+      this.sel.append(h("option", {value: "__ingen__", selected: pl.me === ""}, "Ingen, visa bara linjen"));
+      pl.runners.forEach((r) => {
+        if (!r.selectable) return;
+        this.sel.append(h("option", {value: r.name, selected: r.name === pl.me},
+          `${r.place ? r.place + "  " : ""}${r.name}${r.club ? " · " + r.club : ""}`));
+      });
+    }
+    const none = pl.me === "", me = pl.meIndex ?? null;
+    this.meHelp.textContent = none
+      ? "Välj \"Ingen\" om du inte är med i listan eller vill ha mer plats för linjen. Då försvinner din stora placeringssiffra."
+      : "Programmet minns ditt namn till nästa gång.";
+    this.forget.hidden = !pl.saved;
+    // Snabbval
+    this.chips.top.textContent = me === null ? "Topp 5" : "Topp 5 + du";
+    this.chips.near.disabled = me === null; this.chips.club.disabled = me === null;
+    const n = pl.shown.length + (me === null ? 0 : 1);
+    this.count.textContent = `${n} av max ${pl.max || 8}`;
+    // Listan
+    const lk = `${pl.id}|${me}|${pl.shown.join(",")}|${pl.consent}`;
+    if (this.shownId !== lk) {
+      this.shownId = lk;
+      const top = this.list.scrollTop;
+      this.list.innerHTML = "";
+      const full = n >= (pl.max || 8);
+      pl.runners.forEach((r, i) => {
+        const isMe = i === me, on = isMe || pl.shown.includes(i);
+        const st = r.status === "ok" ? fmtRace(r.time) : (STATUS_TEXT[r.status] || r.status);
+        const vid = !on ? "" : (isMe ? "du" : (pl.consent ? r.short : "utan namn"));
+        this.list.append(h("button", {class: "prow" + (on ? " on" : "") + (isMe ? " me" : "") + (!r.selectable ? " off" : ""),
+          disabled: isMe || !r.selectable || (!on && full), title: !r.selectable ? "Går inte att visa (ingen tid)" : (!on && full ? "Max antal löpare är valda" : ""),
+          onclick: () => {
+            const next = on ? pl.shown.filter((x) => x !== i) : pl.shown.concat([i]);
+            api("set_shown", {shown: next});
+          }},
+          h("span", {class: "cb"}, on ? "✓" : ""), h("span", {class: "pl"}, r.place || ""),
+          h("span", {class: "nm"}, r.name), h("span", {class: "kl"}, r.club),
+          h("span", {class: "tm"}, st), h("span", {class: "vn" + (vid === "utan namn" ? " anon" : "")}, vid)));
+      });
+      this.list.scrollTop = top;
+    }
+    this.cbox.checked = !!pl.consent;
+    this.consent.classList.toggle("on", !!pl.consent);
+    this.consentSub.textContent = me === null
+      ? "Kryssar du inte visas alla bara med placering, utan namn."
+      : "Kryssar du inte visas de andra bara med placering, utan namn.";
   },
 };
 
@@ -623,7 +784,7 @@ const PulsePage = {
   number: 2, kicker: "Steg 2 av 5 · Puls", optional: true, title: "Hitta starten i pulsen", nextStep: 3,
   sub: true, tip: "Klart! Tryck på Nästa.",
   lead: "Klockan vet inte var filmen börjar. Dra den lila linjen till där loppet startar. Där brukar pulsen <b>stiga brant</b>.",
-  active: () => !!S.hr,
+  active: () => S.under === "pulse" && !!S.hr,
   ready() { return S.hr && S.fitStart === null ? "Dra linjen och tryck på <b>Starten är här</b>." : null; },
   ML: 46, MR: 18, MT: 38, MB: 30,
   build(root) {
@@ -893,7 +1054,7 @@ const PreviewPage = {
     this.prevBtn.disabled = busy;
     this.panel.update();
     this.layout();
-    const pk = `${S.flip}|${S.pulse}|${S.llSync}`;
+    const pk = `${S.flip}|${S.pulse}|${S.placingOn}|${S.llSync}`;
     if (this._pk !== pk) { this._pk = pk; this.refresh(); }
   },
   layout() {
@@ -903,7 +1064,7 @@ const PreviewPage = {
     if (W * 9 > H * 16) W = H * 16 / 9; else H = W * 9 / 16;
     const x0 = (r.width - W) / 2, y0 = 0;
     const lw = W * this.width() / S.outW, hw = W - lw;
-    const hb = S.pulse ? H - H * 180 / 1080 : H;   // pulsbandet ligger under headcam, som i videon
+    const hb = S.pulse || S.placingOn ? H - H * 180 / 1080 : H;   // fältet under headcam, som i videon
     Object.assign(this.frame.style, {left: x0 + "px", top: y0 + "px", width: W + "px", height: H + "px"});
     // Headcam mitt i höjd men ovanför pulsbandet; kartan i sin kolumn till höger.
     let ih = Math.min(hb, hw * 9 / 16);
@@ -918,7 +1079,10 @@ const PreviewPage = {
   },
   async drawBand() {
     const g = this.geom, svg = this.band;
+    this.credit.textContent = S.placingOn ? "Karta och sträcktider: Livelox" : "Karta: Livelox";
+    if (S.placingOn && g) return this.drawPlacing();
     if (!S.pulse || !g) { svg.innerHTML = ""; return; }
+    svg.removeAttribute("viewBox");
     if (!this.pdata || this.pdata.id !== S.hr.id) this.pdata = await (await fetch(url("/api/pulse", {}))).json();
     const d = this.pdata, k = g.W / 1920, off = S.fitStart - S.hcSync;
     const at = (t) => PulsePage.at.call({data: d}, t);
@@ -955,6 +1119,16 @@ const PreviewPage = {
     out += `<text x="${32 * k}" y="${gy0 + 94 * k}" style="fill:#fff;font-size:${Math.max(8, 22 * k)}px">slag/min</text>`;
     out += `<text x="${32 * k}" y="${gy0 + 122 * k}" style="fill:#8a8a8a;font-size:${Math.max(7, 18 * k)}px">max ${Math.round(hi - 4)}</text>`;
     svg.innerHTML = out;
+  },
+  async drawPlacing() {
+    const g = this.geom, svg = this.band, t = +this.range.value;
+    svg.setAttribute("width", g.W); svg.setAttribute("height", g.H);
+    svg.setAttribute("viewBox", "0 0 1920 1080");
+    const key = `${t.toFixed(1)}|${this.width()}|${S.placing && S.placing.id}|${S.hcSync}`;
+    if (this._plKey === key) return;
+    this._plKey = key;
+    const r = await (await fetch(url("/api/placing_svg", {t: t.toFixed(2), lw: this.width()}))).json();
+    if (this._plKey === key) svg.innerHTML = `<g font-family="Segoe UI, DejaVu Sans, sans-serif">${r.svg || ""}</g>`;
   },
   _schedule(ms = 60) { clearTimeout(this._job); this._job = setTimeout(() => this.refresh(), ms); },
   refresh() {
@@ -1007,7 +1181,8 @@ const CreatePage = {
     const vals = [["Start i headcam", fmt(S.hcSync)], ["Start i Livelox", fmt(S.llSync)],
       ["Slut", S.endTime === null ? "Hela filmen" : fmt(S.endTime)], ["Längd", "ca " + fmtLong(S.videoLength)]];
     if (S.flip) vals.push(["Headcam", "Vänd 180°"]);
-    if (S.pulse) vals.push(["Puls", "♥ Med"]);
+    if (S.pulse) vals.push(["Under videon", "♥ Puls"]);
+    if (S.placingOn) vals.push(["Under videon", "🏃 Placering"]);
     this.sum.innerHTML = vals.map(([l, v]) => `<div>${l}<b>${esc(v)}</b></div>`).join("");
     for (const c of this.choices) {
       c.el.className = "choice" + (S.quality === c.q ? " on" : "");
@@ -1027,8 +1202,8 @@ const CreatePage = {
   hint() { return S.render.kind === "make" && S.render.ok === true ? "Videon är klar! Titta på den, eller ladda upp den på YouTube." : null; },
 };
 
-const PAGES = [FilesPage, SyncPage, PulsePage, EndPage, PreviewPage, CreatePage];
-const NAMES = ["Välj filmer", "Synka starten", "♥ Synka pulsen", "Välj målgång", "Titta på provbit", "Skapa videon"];
+const PAGES = [FilesPage, PlacingPage, SyncPage, PulsePage, EndPage, PreviewPage, CreatePage];
+const NAMES = ["Välj filmer", "🏃 Placering", "Synka starten", "♥ Synka pulsen", "Välj målgång", "Titta på provbit", "Skapa videon"];
 const isActive = (i) => !PAGES[i].active || PAGES[i].active();
 
 // ---------------------------------------------------------------------------
@@ -1081,10 +1256,10 @@ function refresh() {
   ul.innerHTML = "";
   PAGES.forEach((p, j) => {
     if (!isActive(j)) return;
-    if (p.sub && current < 1) return;  // "Synka pulsen" syns först från steg 2
+    if (p === PulsePage && current < PAGES.indexOf(SyncPage)) return;  // "Synka pulsen" syns först från steg 2
     const state = j === current ? "active" : (j < current ? "done" : "todo");
     const ring = p.sub ? null : h("span", {class: "ctrl"}, state === "done" ? "✓" : p.number);
-    const name = p.sub && state === "done" ? "✓ Synka pulsen" : NAMES[j];
+    const name = p.sub && state === "done" ? "✓ " + NAMES[j].replace(/^\S+ /, "") : NAMES[j];
     ul.append(h("li", {class: `${state}${p.sub ? " sub" : ""}${canJump(j) ? "" : " locked"}`,
       onclick: () => canJump(j) && show(j)}, ring, name));
   });
@@ -1102,7 +1277,7 @@ document.addEventListener("keydown", (e) => {
     if (e.key === "ArrowRight" && llStep < LIVELOX_GUIDE.length - 1) { llStep++; liveloxShow(); }
     if (e.key === "ArrowLeft" && llStep > 0) { llStep--; liveloxShow(); }
   }
-  if (e.key === "Enter" && !termsShown && $("modal").hidden && !["INPUT", "BUTTON", "A"].includes(document.activeElement.tagName)) {
+  if (e.key === "Enter" && !termsShown && $("modal").hidden && !["INPUT", "BUTTON", "A", "TEXTAREA", "SELECT"].includes(document.activeElement.tagName)) {
     if (current < PAGES.length - 1) $("next").click();
   }
 });
@@ -1110,6 +1285,6 @@ document.addEventListener("keydown", (e) => {
 window.addEventListener("beforeunload", (e) => { if (S && S.running) { e.preventDefault(); e.returnValue = ""; } });
 // Fönstret stängs: säg till programmet direkt (annars väntar det på att sidan slutar höras av).
 window.addEventListener("pagehide", () => navigator.sendBeacon(url("/api/bye", {}), ""));
-document.addEventListener("contextmenu", (e) => { if (e.target.tagName !== "INPUT") e.preventDefault(); });
+document.addEventListener("contextmenu", (e) => { if (!["INPUT", "TEXTAREA"].includes(e.target.tagName)) e.preventDefault(); });
 
 poll().then(schedulePoll);
