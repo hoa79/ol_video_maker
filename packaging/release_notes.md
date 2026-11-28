@@ -12,6 +12,10 @@
    avbryter inte längre videon.
 7. **Höjd och fart:** ett nytt val under videon. Höjdkurvan från klockan färgas efter farten,
    från blå (långsamt) till röd (snabbt), och en liten löpare springer längs kurvan.
+8. **Snabbare 4K:** under **Fler val för 4K** kan du välja 30 bilder per sekund, som går
+   ungefär en tredjedel fortare att skapa. Höjd och fart-bandet går också fortare i 4K.
+9. **Klar ungefär kl. …:** medan videon skapas står det när den blir klar. Tiden räknas om
+   efter hur fort det faktiskt går.
 
 ## Så kommer du igång
 

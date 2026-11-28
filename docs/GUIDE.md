@@ -182,8 +182,14 @@ Du kan alltid klicka på **Tillbaka** och ändra.
    1. Välj **Full HD** eller **4K**. På valen står ungefär hur lång tid det tar på din dator
       (tiden räknas ut medan du tittar på sidan). Full HD räcker för de flesta. 4K blir
       skarpare men tar längre tid och ger en större fil.
+      Filmar kameran med 50 eller 60 bilder per sekund finns **Fler val för 4K** under 4K-valet.
+      Där kan du kryssa i **Snabbare (30 bilder per sekund)**. Då går det ungefär en tredjedel
+      fortare att skapa videon, men snabba rörelser blir lite mindre mjuka.
    2. Kontrollera var videon sparas. Klicka på **Ändra…** om du vill spara den någon annanstans.
    3. Klicka på den stora knappen **Skapa videon**.
+      Under stapeln står ungefär när videon blir klar, till exempel **Klar ungefär kl. 15:42**.
+      Tiden räknas om hela tiden efter hur fort det går. Tittar du på film eller spelar på
+      datorn under tiden kan det ta längre tid, eftersom grafikkortet då har annat att göra.
       Datorn hålls vaken tills videon är klar, men skärmen får släckas. Fäll inte ner locket
       på en bärbar dator, för då somnar den ändå. Har datorn sovit en stund fortsätter videon
       där den var när datorn vaknar, och programmet skriver hur länge den sov.

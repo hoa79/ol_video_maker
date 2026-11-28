@@ -34,12 +34,12 @@ import threading
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from . import __version__, speedcache, vila, villkor
 from .core import (DEFAULT_LIVELOX_WIDTH, OUT_W, Job, MediaInfo, VideoMakerError, check_tools,
-                   ensure_mp4, find_tool, format_time, is_packaged, probe, render,
+                   ensure_mp4, find_tool, format_time, half_fps, is_packaged, probe, render,
                    sort_headcam_files)
 from .filedialogs import ask_open, ask_save
 from .fitfile import HeartRate, Terrain, load_fit, pace_text
@@ -57,6 +57,8 @@ LEAD_IN = 5.0          # sekunder före starten som tas med i videon
 PREVIEW_SECONDS = 20   # längd på provvideor
 PREVIEW_PREFIX = "OL_Video_provvideo_"
 BENCH_SECONDS = 6.0    # så lång provbit som skapas för att mäta datorns hastighet
+MODES = ("1", "2", "2f")  # Full HD, 4K, 4K med halva bildfrekvensen
+FAST_FACTOR = 1.45       # så mycket fortare halva bildfrekvensen gick (4K, riktig GoPro-film)
 MIN_LEARN_SECONDS = 20.0  # kortare videor än så används inte för att lära sig hastigheten
 LW_MIN, LW_MAX = 320, 960
 MAX_FRAME = (1920, 1080)
@@ -257,10 +259,14 @@ class State:
         self.livelox_width = DEFAULT_LIVELOX_WIDTH
         self.output = ""
         self.quality = 1
+        # 4K görs med kamerans bildfrekvens. "Snabbare" under "Fler val för 4K" ger halva
+        # (t.ex. 30 i stället för 60 bilder/s), som går mycket snabbare att skapa.
+        self.fast4k = False
         # Hur snabbt datorn skapar video (sekunder video per sekund) i Full HD (1) och 4K (2),
         # för den sorts filmer som är valda. Tiden räknas fram ur längden, så att ändrad start
         # eller målgång inte kräver någon ny provvideo. Se speedcache.py.
-        self.speeds: Dict[int, Optional[float]] = {1: None, 2: None}
+        # Nycklar: "1" Full HD, "2" 4K och "2f" 4K med halva bildfrekvensen (snabbare).
+        self.speeds: Dict[str, Optional[float]] = {m: None for m in MODES}
         self.bench_key = None
         self.bench_running = False
         self.bench_cancel = False
@@ -308,7 +314,10 @@ class State:
                 "videoLength": self.video_length(), "leadIn": LEAD_IN,
                 "previewSeconds": PREVIEW_SECONDS,
                 "output": self.output, "quality": self.quality,
-                "estimates": {str(k): self.estimate(k) for k in (1, 2)},
+                "fast4k": self.fast4k, "canFast": self._can_fast(),
+                "fpsFast": self._fps_label(self._mode_fps("2f")),
+                "fpsCam": self._fps_label(self.hc_infos[0].fps if self.hc_infos else None),
+                "estimates": {m: self.estimate(m) for m in MODES},
                 "benchRunning": self.bench_running,
                 "running": self.running, "render": dict(self.render),
                 "termsAccepted": self.terms_accepted,
@@ -649,6 +658,11 @@ class State:
             self.quality = 2 if int(body["q"]) == 2 else 1
         return {}
 
+    def set_fast(self, body) -> Dict[str, Any]:
+        if not self.running:
+            self.fast4k = bool(body.get("on"))
+        return {}
+
     def set_output(self, body) -> Dict[str, Any]:
         self.output = str(body["path"])
         return {}
@@ -716,14 +730,16 @@ class State:
                 return {}
             self.bench_cancel = True
             job = self.make_job(out)
+            mode = self._mode()
             job.scale = self.quality
-            est = self.estimate(self.quality)
-            speed_key = self._speed_key(job.scale)
+            job.fps = self._mode_fps(mode)
+            est = self.estimate(mode)
+            speed_key = self._speed_key(mode)
             length = self.video_length()
         q = "4K" if job.scale == 2 else "Full HD"
         extra = f" Beräknad tid: {fmt_estimate(est)}." if est else ""
         self._start_render("make", job, f"Skapar videon i {q}…{extra}", open_when_done=False,
-                           speed_key=speed_key, length=length)
+                           speed_key=speed_key, length=length, mode=mode, estimate=est)
         return {}
 
     def _ready_for_video(self) -> bool:
@@ -731,7 +747,8 @@ class State:
                     and self.ll_sync is not None)
 
     def _start_render(self, kind: str, job: Job, text: str, open_when_done: bool,
-                      speed_key: Optional[str] = None, length: float = 0.0) -> None:
+                      speed_key: Optional[str] = None, length: float = 0.0,
+                      mode: Optional[str] = None, estimate: Optional[float] = None) -> None:
         with self.lock:
             if self.running:
                 return
@@ -739,13 +756,16 @@ class State:
             self.cancel = False
             self.current_output = job.output_file
             self.render = {"kind": kind, "text": text, "progress": 0.0, "ok": None, "path": None,
-                           "error": None, "slept": 0, "awake": False, "seq": self.render["seq"] + 1}
+                           "error": None, "slept": 0, "awake": False, "seq": self.render["seq"] + 1,
+                           "left": estimate}
 
         meter = vila.SleepMeter()
+        eta = RemainingTime(estimate)
 
         def progress(p: float) -> None:
             self.render["progress"] = p
             self.render["slept"] = round(meter.slept())
+            self.render["left"] = eta.update(meter.awake(), p)
 
         def work():
             path, error = None, None
@@ -778,8 +798,8 @@ class State:
                 # En riktig video är den bästa mätningen: spara den till nästa gång.
                 speedcache.put(speed_key, length / elapsed, source="video")
                 with self.lock:
-                    if self._speed_key(job.scale) == speed_key:
-                        self.speeds[job.scale] = speedcache.get(speed_key)
+                    if mode and self._speed_key(mode) == speed_key:
+                        self.speeds[mode] = speedcache.get(speed_key)
             if path and open_when_done:
                 _open_file(path)
         threading.Thread(target=work, daemon=True).start()
@@ -810,20 +830,53 @@ class State:
                 pass
 
     # --- tidsuppskattning i steg 5 ---
-    def _speed_key(self, scale: int) -> Optional[str]:
+    def _mode(self) -> str:
+        return "1" if self.quality == 1 else ("2f" if self.fast4k and self._can_fast() else "2")
+
+    def _mode_fps(self, mode: str) -> Optional[str]:
+        """Bildfrekvensen för ett läge (None = kamerans)."""
+        if mode != "2f" or not self.hc_infos:
+            return None
+        return half_fps(self.hc_infos[0].fps)
+
+    def _can_fast(self) -> bool:
+        return self._mode_fps("2f") is not None
+
+    @staticmethod
+    def _fps_label(fps: Optional[str]) -> Optional[int]:
+        if not fps:
+            return None
+        num, _, den = str(fps).partition("/")
+        try:
+            return round(int(num) / int(den or 1))
+        except (ValueError, ZeroDivisionError):
+            return None
+
+    def _speed_key(self, mode: str) -> Optional[str]:
         """Vilken sorts film det är, för minnet av datorns hastighet. Start, målgång,
         vändning och kartans bredd påverkar knappt hastigheten och ingår inte. Bandet under
-        videon (puls, höjd och fart eller placeringslinje) ingår, men inga namn eller
-        sträcktider."""
+        videon (puls, höjd och fart eller placeringslinje) och bildfrekvensen ingår, men inga
+        namn eller sträcktider."""
         if not self.hc_infos or self.ll_info is None:
             return None
+        if mode == "2f" and not self._can_fast():
+            mode = "2"
+        band = ("placering" if self.placing_track() is not None
+                else "hojd" if self.terrain_track() is not None else "")
+        fps = self._mode_fps(mode)
+        extra = "|".join(x for x in (band, f"bps {fps}" if fps else "") if x)
         return speedcache.profile(self.hc_infos[0], self.ll_info,
-                                  self.pulse_track() is not None, scale,
-                                  extra="placering" if self.placing_track() is not None
-                                  else "hojd" if self.terrain_track() is not None else "")
+                                  self.pulse_track() is not None, 1 if mode == "1" else 2,
+                                  extra=extra)
 
-    def estimate(self, scale: int) -> Optional[float]:
-        speed = self.speeds.get(scale)
+    def estimate(self, mode: str) -> Optional[float]:
+        speed = self.speeds.get(mode)
+        if not speed and mode == "2f":
+            if not self._can_fast():
+                speed = self.speeds.get("2")
+            elif self.speeds.get("2"):
+                # Inte uppmätt än: halva bildfrekvensen gick ca 45 % fortare på en riktig dator.
+                speed = self.speeds["2"] * FAST_FACTOR
         if not speed:
             return None
         return self.video_length() / max(speed, 1e-3) + 5
@@ -831,22 +884,26 @@ class State:
     def bench(self, _body) -> Dict[str, Any]:
         """Ta fram datorns hastighet för de valda filmerna. Finns den sparad sedan tidigare
         (samma sorts filmer) används den direkt. Annars görs en kort provbit, bara för den
-        upplösning som saknas, och resultatet sparas till nästa gång."""
+        upplösning som saknas, och resultatet sparas till nästa gång. Den snabbare 4K-varianten
+        (halva bildfrekvensen) mäts inte, den uppskattas från vanlig 4K tills en riktig video
+        har gjorts."""
         with self.lock:
             if not self._ready_for_video() or self.running:
                 return {}
-            keys = {scale: self._speed_key(scale) for scale in (1, 2)}
-            if self.bench_key == keys and (self.bench_running or None not in self.speeds.values()):
+            keys = {m: self._speed_key(m) for m in MODES}
+            if self.bench_key == keys and (self.bench_running or
+                                           None not in (self.speeds["1"], self.speeds["2"])):
                 return {}
             self.bench_key = keys
-            self.speeds = {scale: speedcache.get(k) if k else None for scale, k in keys.items()}
-            missing = [scale for scale in (1, 2) if self.speeds[scale] is None]
+            self.speeds = {m: speedcache.get(k) if k else None for m, k in keys.items()}
+            missing = [m for m in ("1", "2") if self.speeds[m] is None]
             if not missing:
                 return {}
             self.bench_running = True
             self.bench_cancel = False
 
-        def measure(scale):
+        def measure(mode):
+            scale = 1 if mode == "1" else 2
             out = os.path.join(tempfile.gettempdir(),
                                f"{PREVIEW_PREFIX}tidtest_{scale}_{time.strftime('%H%M%S')}.mp4")
             with self.lock:
@@ -854,6 +911,7 @@ class State:
                 start = self.hc_sync or 0.0
                 job.end_time = min(self.hc_tl.duration, start + BENCH_SECONDS)
             job.scale = scale
+            job.fps = self._mode_fps(mode)
             job.lead_in = 0.0
             marks = []
             try:
@@ -872,21 +930,21 @@ class State:
 
         def work():
             try:
-                for scale in missing:
+                for mode in missing:
                     with self.lock:
                         if self.bench_key != keys:
                             return  # filmerna har bytts, en ny mätning har tagit över
                     try:
-                        speed = measure(scale)
+                        speed = measure(mode)
                     except Exception:
                         with self.lock:
                             if self.bench_key == keys:
                                 self.bench_key = None  # mät igen nästa gång steget visas
                         return
-                    speedcache.put(keys[scale], speed, source="prov")
+                    speedcache.put(keys[mode], speed, source="prov")
                     with self.lock:
                         if self.bench_key == keys:
-                            self.speeds[scale] = speed
+                            self.speeds[mode] = speed
             finally:
                 with self.lock:
                     if self.bench_key == keys or self.bench_key is None:
@@ -940,6 +998,36 @@ def _terrain_info(ter: Optional[Terrain]) -> Optional[Dict[str, Any]]:
             "fast": pace_text(s_hi), "profile": prof}
 
 
+class RemainingTime:
+    """Tid kvar medan videon skapas, räknad på hur fort det faktiskt går just nu.
+
+    Uppskattningen från steg 5 gäller tills det har gått en stund. Sedan räknas tiden kvar
+    fram ur farten de senaste minuterna (inte hela körningen), så att den följer med om datorn
+    blir långsammare eller snabbare, till exempel om ett annat program använder grafikkortet.
+    Tiden mäts bara medan datorn är vaken (se vila.SleepMeter).
+    """
+    WINDOW = 180.0     # sekunder bakåt som farten räknas på
+    WARMUP = 20.0      # så länge används uppskattningen från steg 5 (starten är ojämn)
+
+    def __init__(self, estimate: Optional[float]) -> None:
+        self.estimate = estimate
+        self.marks: List[Tuple[float, float]] = []
+
+    def update(self, awake: float, p: float) -> Optional[float]:
+        if self.marks and p < self.marks[-1][1]:
+            self.marks = []   # börjar om (t.ex. en ny körning med bara processorn)
+        self.marks.append((awake, p))
+        while len(self.marks) > 2 and awake - self.marks[1][0] > self.WINDOW:
+            self.marks.pop(0)
+        t0, p0 = self.marks[0]
+        if awake < self.WARMUP or p - p0 <= 0.002 or awake - t0 < 5:
+            if self.estimate is None:
+                return None
+            return max(0.0, self.estimate - awake)
+        rate = (p - p0) / (awake - t0)
+        return max(0.0, (1.0 - p) / rate)
+
+
 def fmt_estimate(seconds: Optional[float]) -> str:
     if seconds is None:
         return "beräknar tid…"
@@ -957,7 +1045,7 @@ def fmt_estimate(seconds: Optional[float]) -> str:
 
 
 ACTIONS = ("pick_headcam", "pick_livelox", "load", "pick_fit", "load_fit", "remove_fit", "mark",
-           "set_flip", "set_width", "nudge", "set_quality", "set_output", "pick_output",
+           "set_flip", "set_width", "nudge", "set_quality", "set_fast", "set_output", "pick_output",
            "open_help", "open_output", "preview", "make", "cancel_render", "bench",
            "accept_terms", "decline_terms", "set_under", "set_splits", "set_me", "forget_me",
            "set_shown", "preset_shown", "set_consent")

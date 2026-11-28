@@ -55,6 +55,18 @@ function fmtLong(sec) {
   return `${s} s`;
 }
 
+// Klockslag om sec sekunder, t.ex. "15:42".
+function clockIn(sec) {
+  const d = new Date(Date.now() + sec * 1000);
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function leftText(sec) {
+  if (sec < 60) return "under 1 minut kvar";
+  const m = Math.round(sec / 60);
+  return m < 60 ? `om ca ${m} min` : `om ca ${Math.floor(m / 60)} tim ${m % 60} min`;
+}
+
 function fmtEstimate(sec) {
   if (sec === null || sec === undefined) return "beräknar tid…";
   if (sec < 60) return "under 1 minut";
@@ -1015,6 +1027,11 @@ function renderPanel(kind) {
     bar.style.width = `${Math.round(r.progress * 100)}%`;
     text.textContent = S.running && r.text !== "Avbryter…" && r.progress > 0
       ? `${r.text.replace(/….*/, "…")} ${Math.round(r.progress * 100)} %` : r.text;
+    // Videon: när den blir klar, räknat på hur fort det går just nu.
+    if (kind === "make" && S.running && r.text !== "Avbryter…" && r.left !== null && r.left !== undefined) {
+      if (text.textContent.indexOf("…") < 0) text.textContent = r.text.replace(/….*/, "…");
+      text.append(" · ", h("b", {class: "eta"}, `Klar ungefär kl. ${clockIn(r.left)}`), ` (${leftText(r.left)})`);
+    }
     row.className = "rstatus" + (r.ok === true ? " ok" : (r.ok === false ? " bad" : ""));
     cancel.hidden = !S.running;
     // Provvideo: bara "Klart!" och en knapp (ett långt filnamn bryts annars mitt i ordet).
@@ -1289,6 +1306,13 @@ const CreatePage = {
         h("div", {}, h("b", {}, q === 1 ? "Full HD" : "4K"), sub), h("span", {class: "radio"}));
       return {q, el, sub};
     });
+    // "Fler val för 4K": en dold kryssruta för halva bildfrekvensen (snabbare att skapa).
+    this.moreOpen = !!S.fast4k;
+    this.moreLink = h("a", {href: "#", onclick: (e) => { e.preventDefault(); this.moreOpen = !this.moreOpen; this.update(); }});
+    this.fastBox = h("input", {type: "checkbox", onchange: () => api("set_fast", {on: this.fastBox.checked})});
+    this.fastTitle = h("b"); this.fastText = h("span");
+    this.more = h("div", {class: "more4k"}, this.moreLink,
+      this.fastPanel = h("label", {class: "fastbox"}, this.fastBox, h("span", {}, this.fastTitle, h("br"), this.fastText)));
     this.path = h("input", {type: "text", spellcheck: "false", onchange: () => api("set_output", {path: this.path.value})});
     this.makeBtn = h("button", {class: "big", onclick: () => api("make", {path: this.path.value})}, "🎬 Skapa videon");
     this.panel = renderPanel("make");
@@ -1298,6 +1322,7 @@ const CreatePage = {
     root.append(this.sum,
       h("div", {class: "label"}, this.n1 = num(1), "Välj kvalitet"),
       h("div", {class: "choices"}, this.choices.map((c) => c.el)),
+      this.more,
       h("div", {class: "label"}, this.n2 = num(2), "Kontrollera var videon sparas"),
       h("div", {class: "saverow"}, this.path, h("button", {class: "ghost lg", onclick: () => api("pick_output")}, "Ändra…")),
       h("div", {class: "makerow"}, this.n3 = num(3), this.makeBtn),
@@ -1312,13 +1337,23 @@ const CreatePage = {
     if (S.placingOn) vals.push(["Under videon", "🏃 Placering"]);
     if (S.terrainOn) vals.push(["Under videon", "⛰️ Höjd och fart"]);
     this.sum.innerHTML = vals.map(([l, v]) => `<div>${l}<b>${esc(v)}</b></div>`).join("");
+    const fast = S.fast4k && S.canFast;
     for (const c of this.choices) {
       c.el.className = "choice" + (S.quality === c.q ? " on" : "");
       c.el.disabled = S.running;
-      const est = S.estimates[c.q];
+      const est = S.estimates[c.q === 1 ? "1" : (fast ? "2f" : "2")];
       const tail = est !== null ? ` · tar ${fmtEstimate(est)}` : (S.benchRunning ? " · beräknar tid…" : "");
       c.sub.textContent = (c.q === 1 ? "Bra för YouTube · 1920 × 1080" : "Skarpast, större fil · 3840 × 2160") + tail;
     }
+    this.more.hidden = !(S.quality === 2 && S.canFast);
+    this.moreLink.textContent = this.moreOpen ? "Färre val ▴" : "Fler val för 4K ▸";
+    this.fastPanel.hidden = !this.moreOpen;
+    this.fastBox.checked = !!S.fast4k;
+    this.fastBox.disabled = S.running;
+    this.fastTitle.textContent = `Snabbare (${S.fpsFast || 30} bilder per sekund)`;
+    const e2 = S.estimates["2"], e2f = S.estimates["2f"];
+    this.fastText.textContent = "Rörelserna blir lite mindre mjuka och filen mindre." +
+      (e2 !== null && e2f !== null ? ` Tar ${fmtEstimate(e2f)} i stället för ${fmtEstimate(e2).replace(/^ca /, "")}.` : "");
     if (document.activeElement !== this.path) this.path.value = S.output;
     this.makeBtn.disabled = S.running;
     const finished = S.render.kind === "make" && S.render.ok === true && !S.running;
