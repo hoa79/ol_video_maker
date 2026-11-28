@@ -14,6 +14,7 @@ Guiden har fem steg:
 3. Välj slutet
 4. Titta på en provbit
 5. Skapa videon
+6. Kort video för mobilen (frivilligt): välj bitar till en stående video på ca 1 minut
 
 Sidan (web/index.html, app.css, app.js) frågar servern efter läget med /api/state och
 skickar knapptryck till /api/<åtgärd>. Bilder ur filmerna hämtas med /frame och /play.
@@ -38,7 +39,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from . import __version__, speedcache, vila, villkor
-from .core import (DEFAULT_LIVELOX_WIDTH, OUT_W, Job, MediaInfo, VideoMakerError, check_tools,
+from .core import (DEFAULT_CREDIT, DEFAULT_LIVELOX_WIDTH, OUT_W, PLACING_CREDIT, Job,
+                   MediaInfo, VideoMakerError, check_tools,
                    ensure_mp4, find_tool, format_time, half_fps, is_packaged, probe, render,
                    sort_headcam_files)
 from .filedialogs import ask_open, ask_save
@@ -47,7 +49,9 @@ from .frames import Timeline, grab_frame, mjpeg_command
 from .placing_video import PlacingTrack, svg_at
 from .pulse_video import PulseTrack
 from .terrain_video import TerrainTrack
+from . import short_video
 from . import splits as splitmod
+from .short_video import Clip, ShortJob, render_short
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 GUIDE_URL = "https://github.com/hoa79/ol_video_maker/blob/main/docs/GUIDE.md"
@@ -281,6 +285,9 @@ class State:
         # Villkoren (ansvarsfriskrivningen) måste godkännas innan programmet används.
         self.terms_accepted = villkor.is_accepted()
         self.quit_requested = False
+        # Kort video (steg 6): bitarna. None = inget förval gjort än för de här filmerna.
+        self.clips: Optional[List[Clip]] = None
+        self.clips_key: Optional[tuple] = None  # start, slut och sträcktider när förvalet gjordes
 
     # --- läget som JSON ---
     def snapshot(self) -> Dict[str, Any]:
@@ -322,6 +329,7 @@ class State:
                 "running": self.running, "render": dict(self.render),
                 "termsAccepted": self.terms_accepted,
                 "terms": None if self.terms_accepted else villkor.as_dict(),
+                "short": self.short_info(),
             }
 
     def video_length(self) -> float:
@@ -472,6 +480,7 @@ class State:
                         self.hc_infos, self.hc_tl = infos, tl
                         self.hc_sync = None
                         self.end_time = None
+                        self.clips = None
                         folder = os.path.dirname(tl.clips[0].path)
                         self.output = os.path.join(folder, "OL-video.mp4")
                     else:
@@ -742,13 +751,112 @@ class State:
                            speed_key=speed_key, length=length, mode=mode, estimate=est)
         return {}
 
+    # --- kort video för mobilen (steg 6) ---
+    def _short_end(self) -> float:
+        return self.end_time if self.end_time is not None else self.hc_tl.duration
+
+    def short_info(self) -> Dict[str, Any]:
+        clips = self.clips or []
+        sync = self.hc_sync or 0.0
+        est = None
+        speed = self.speeds.get("1")
+        if speed and clips:
+            # Ungefär som Full HD, plus en liten startkostnad per bit.
+            est = short_video.total(clips) / max(speed, 1e-3) + 2 * len(clips) + 3
+        return {"clips": [{"start": c.start, "length": c.length, "name": c.name,
+                           "race": c.start - sync, "label": short_video.label(c, sync)}
+                          for c in clips],
+                "total": short_video.total(clips), "max": short_video.MAX_SECONDS,
+                "clipSeconds": short_video.CLIP_SECONDS, "maxClips": short_video.MAX_CLIPS,
+                "output": short_video.short_path(self.output) if self.output else "",
+                "estimate": est}
+
+    def short_show(self, _body) -> Dict[str, Any]:
+        """Steg 6 visas: gör ett förval om det inte finns något, eller om starten, målgången
+        eller sträcktiderna har ändrats sedan förra förvalet (då stämmer bitarna inte längre)."""
+        with self.lock:
+            if self._ready_for_video() and (self.clips is None or self.clips_key != self._short_key()):
+                self._short_suggest()
+        return {}
+
+    def _short_key(self) -> tuple:
+        return (self.hc_sync, self.end_time, self.splits_id, self.me)
+
+    def _short_suggest(self) -> None:
+        self.clips_key = self._short_key()
+        me = self._index(self.me)
+        if me is not None and not self.splits.runners[me].selectable:
+            me = None
+        self.clips = short_video.suggest(self.hc_sync, self._short_end(), self.hc_tl.duration,
+                                         self.splits, me)
+
+    def short_reset(self, _body) -> Dict[str, Any]:
+        with self.lock:
+            if not self.running and self._ready_for_video():
+                self._short_suggest()
+        return {}
+
+    def short_add(self, body) -> Dict[str, Any]:
+        with self.lock:
+            if self.running or not self._ready_for_video():
+                return {}
+            if self.clips is None:
+                self.clips = []
+            t = float(body["t"])
+            # Biten börjar lite före det man pekat på, så att man hinner se vad som händer.
+            clip = Clip(t - 3.0, short_video.CLIP_SECONDS, "")
+            if not short_video.add_clip(self.clips, clip, 0.0, self.hc_tl.duration):
+                left = short_video.MAX_SECONDS - short_video.total(self.clips)
+                if left < 2 or len(self.clips) >= short_video.MAX_CLIPS:
+                    return {"error": {"title": "Den korta videon är full",
+                                      "text": "Den får vara högst 1 minut. Ta bort en bit "
+                                              "först, och lägg sedan till den nya."}}
+                return {"error": {"title": "Biten finns redan",
+                                  "text": "Du har redan en bit här. Välj ett annat ställe."}}
+        return {}
+
+    def short_remove(self, body) -> Dict[str, Any]:
+        with self.lock:
+            i = int(body["i"])
+            if not self.running and self.clips and 0 <= i < len(self.clips):
+                del self.clips[i]
+        return {}
+
+    def make_short(self, body) -> Dict[str, Any]:
+        with self.lock:
+            if self.running or not self._ready_for_video() or not self.clips:
+                return {}
+            if not self.output:
+                folder = os.path.dirname(self.hc_tl.clips[0].path)
+                self.output = os.path.join(folder, "OL-video.mp4")
+            out = short_video.short_path(self.output)
+        if os.path.exists(out) and not body.get("overwrite"):
+            return {"confirm": {"title": "Filen finns redan",
+                                "text": f"{os.path.basename(out)} finns redan.",
+                                "question": "Vill du ersätta den?", "yes": "Ersätt",
+                                "action": "make_short", "body": {"overwrite": True}}}
+        with self.lock:
+            # Kontrollernas namn kommer från sträcktiderna, då anges även de som källa.
+            from_splits = any(c.name.startswith("Kontroll") for c in self.clips)
+            credit = PLACING_CREDIT if from_splits else DEFAULT_CREDIT
+            job = ShortJob(headcam_files=[c.path for c in self.hc_tl.clips],
+                           livelox_file=self.ll_tl.clips[0].path, output_file=out,
+                           clips=[Clip(c.start, c.length, c.name) for c in self.clips],
+                           headcam_sync=self.hc_sync or 0.0, livelox_sync=self.ll_sync or 0.0,
+                           headcam_flip=self.hc_flip, credit_text=credit)
+            est = self.short_info()["estimate"]
+        self._start_render("short", job, "Skapar den korta videon…", open_when_done=False,
+                           estimate=est, runner=render_short)
+        return {}
+
     def _ready_for_video(self) -> bool:
         return bool(self.hc_tl and self.ll_tl and self.hc_sync is not None
                     and self.ll_sync is not None)
 
     def _start_render(self, kind: str, job: Job, text: str, open_when_done: bool,
                       speed_key: Optional[str] = None, length: float = 0.0,
-                      mode: Optional[str] = None, estimate: Optional[float] = None) -> None:
+                      mode: Optional[str] = None, estimate: Optional[float] = None,
+                      runner: Callable[..., str] = render) -> None:
         with self.lock:
             if self.running:
                 return
@@ -774,7 +882,7 @@ class State:
                 # börja och sluta i samma tråd som gör jobbet.
                 with vila.keep_awake() as awake:
                     self.render["awake"] = awake  # visas som en rad i steg 5
-                    path = render(job, progress=progress, cancel_flag=lambda: self.cancel,
+                    path = runner(job, progress=progress, cancel_flag=lambda: self.cancel,
                                   on_process=lambda p: setattr(self, "proc", p))
             except VideoMakerError as e:
                 error = str(e)
@@ -1048,7 +1156,8 @@ ACTIONS = ("pick_headcam", "pick_livelox", "load", "pick_fit", "load_fit", "remo
            "set_flip", "set_width", "nudge", "set_quality", "set_fast", "set_output", "pick_output",
            "open_help", "open_output", "preview", "make", "cancel_render", "bench",
            "accept_terms", "decline_terms", "set_under", "set_splits", "set_me", "forget_me",
-           "set_shown", "preset_shown", "set_consent")
+           "set_shown", "preset_shown", "set_consent", "short_show", "short_reset", "short_add",
+           "short_remove", "make_short")
 # Det enda som går att göra innan villkoren är godkända (Avsluta sköts av /api/bye).
 BEFORE_TERMS = ("accept_terms", "decline_terms", "open_help")
 

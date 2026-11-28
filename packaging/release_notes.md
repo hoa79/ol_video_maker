@@ -1,5 +1,11 @@
 ## Nyheter i den här versionen
 
+1. **Kort video för mobilen:** ett nytt frivilligt steg 6 gör en video på högst 1 minut i
+   stående format för TikTok, Instagram och Reels. Programmet föreslår bitar (start,
+   kontroller och målgång) och du lägger till eller tar bort bitar själv.
+
+## Från v0.6.0-beta
+
 1. **Snabbare 4K:** under **Fler val för 4K** kan du välja 30 bilder per sekund, som går
    ungefär en tredjedel fortare att skapa. Höjd och fart-bandet går också fortare i 4K.
 2. **Klar ungefär kl. …:** medan videon skapas står det när den blir klar. Tiden räknas om

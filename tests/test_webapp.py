@@ -116,6 +116,37 @@ class WebAppTest(unittest.TestCase):
         s = self.post("set_width", {"width": 707})["state"]
         self.assertEqual(s["liveloxWidth"], 700)
 
+    @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg saknas")
+    def test_short_video_clips(self):
+        folder = tempfile.mkdtemp()
+        hc, ll = os.path.join(folder, "hc2.mp4"), os.path.join(folder, "ll2.mp4")
+        make_clip(hc, 40, "320x180")
+        make_clip(ll, 40, "320x180", audio=False)
+        self.post("load", {"which": "headcam", "files": [hc]})
+        self.post("load", {"which": "livelox", "files": [ll]})
+        for _ in range(100):
+            s = json.loads(self.get("/api/state")[2])
+            if s["hc"] and s["ll"] and s["hc"]["duration"] > 30:
+                break
+            threading.Event().wait(0.1)
+        self.post("mark", {"what": "hc", "t": 2.0})
+        self.post("mark", {"what": "ll", "t": 1.0})
+        sh = self.post("short_show", {})["state"]["short"]
+        names = [c["name"] for c in sh["clips"]]
+        self.assertEqual(names[0], "Start")
+        self.assertEqual(names[-1], "Målgång")
+        self.assertTrue(sh["output"].endswith("OL-video_kort.mp4"))
+        n = len(sh["clips"])
+        sh = self.post("short_remove", {"i": 1})["state"]["short"]
+        self.assertEqual(len(sh["clips"]), n - 1)
+        # Samma ställe en gång till: biten finns redan.
+        r = self.post("short_add", {"t": 4.0})
+        self.assertIn("error", r)
+        # Ny start: förvalet görs om när steget visas igen.
+        self.post("mark", {"what": "hc", "t": 3.0})
+        sh = self.post("short_show", {})["state"]["short"]
+        self.assertAlmostEqual(sh["clips"][0]["start"], 2.0)
+
     def test_terrain_from_fit(self):
         from ol_video_maker.fitfile import write_fit
         folder = tempfile.mkdtemp()
@@ -210,6 +241,7 @@ class VillkorTest(WebAppTest):
 
     # Testerna i WebAppTest kräver godkännande; de körs redan där.
     test_load_mark_and_frame = None
+    test_short_video_clips = None
 
 
 if __name__ == "__main__":
