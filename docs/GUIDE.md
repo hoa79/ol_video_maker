@@ -190,7 +190,7 @@ Du kan alltid klicka på **Tillbaka** och ändra.
 
 1. Gå till **connect.garmin.com** i webbläsaren och logga in.
 2. Öppna aktiviteten för ditt lopp.
-3. Klicka på **kugghjulet** uppe till höger och välj **Exportera original**.
+3. Klicka på **kugghjulet** uppe till höger och välj **Export File**.
 4. Du får en zip-fil. Välj den direkt i programmet (eller packa upp .fit-filen först).
 
 Utan internet: anslut klockan till datorn med USB-kabeln. Filerna ligger i mappen

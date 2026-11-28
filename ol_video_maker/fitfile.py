@@ -262,7 +262,7 @@ def load_fit(path: str) -> HeartRate:
     name = os.path.basename(path)
     try:
         if zipfile.is_zipfile(path):
-            # Garmin Connect ("Exportera original") ger en zip-fil med .fit-filen i.
+            # Garmin Connect ("Export File") ger en zip-fil med .fit-filen i.
             with zipfile.ZipFile(path) as z:
                 fits = [n for n in z.namelist() if n.lower().endswith(".fit")]
                 if not fits:
