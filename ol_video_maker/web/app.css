@@ -309,6 +309,10 @@ kbd{display:inline-block;min-width:30px;padding:3px 9px;border:1px solid var(--g
 /* ---------- steg 1: under videon ---------- */
 .undercard{margin-top:18px;flex:none;padding:16px 20px;gap:8px}
 .undercard h2{font-size:17px;margin:0}
+.clockcard{flex-direction:row;align-items:center;flex-wrap:wrap;gap:6px 22px;padding:12px 20px}
+.clockbox{display:flex;gap:10px;align-items:flex-start;cursor:pointer;flex:1 1 380px;font-size:14px}
+.clockbox input{margin-top:2px;width:18px;height:18px;flex:none;accent-color:var(--primary)}
+.clockbox small{display:block;font-size:12.5px;color:var(--muted);margin-top:1px}
 .usub{font-size:13px;color:var(--muted);margin:-4px 0 2px 32px}
 .uopts{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-left:32px}
 .uopt{display:flex;align-items:flex-start;gap:10px;text-align:left;padding:10px 12px;border-radius:8px;border:2px solid var(--ghostBorder);background:var(--ghost)}

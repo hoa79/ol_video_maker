@@ -44,6 +44,7 @@ from .core import (DEFAULT_LIVELOX_WIDTH, OUT_W, Job, MediaInfo, VideoMakerError
 from .filedialogs import ask_open, ask_save
 from .fitfile import HeartRate, Terrain, load_fit, pace_text
 from .frames import Timeline, grab_frame, mjpeg_command
+from .clock_video import ClockTrack
 from .placing_video import PlacingTrack, svg_at
 from .pulse_video import PulseTrack
 from .terrain_video import TerrainTrack
@@ -54,6 +55,7 @@ GUIDE_URL = "https://github.com/hoa79/ol_video_maker/blob/main/docs/GUIDE.md"
 FIT_TYPES = [("Pulsfil från klockan", "*.fit *.FIT *.zip *.ZIP"), ("Alla filer", "*.*")]
 VIDEO_TYPES = [("Videofiler", "*.mp4 *.MP4 *.mov *.MOV *.mkv *.webm *.avi"), ("Alla filer", "*.*")]
 LEAD_IN = 5.0          # sekunder före starten som tas med i videon
+AFTER_FINISH = 5.0     # sekunder efter målgången (klockan syns stanna, grön)
 PREVIEW_SECONDS = 20   # längd på provvideor
 PREVIEW_PREFIX = "OL_Video_provvideo_"
 BENCH_SECONDS = 6.0    # så lång provbit som skapas för att mäta datorns hastighet
@@ -255,6 +257,8 @@ class State:
         self.me: Optional[str] = None       # ditt namn, "" = Ingen (visa bara linjen)
         self.shown: List[str] = []          # namnen på dem som syns (utom du)
         self.consent = False                # får inte vara förifylld (juristen)
+        # Klockan med tid sedan start ovanför filmen (kortet "Tid sedan start" i steg 1).
+        self.clock_on = True
         self.hc_flip = False
         self.livelox_width = DEFAULT_LIVELOX_WIDTH
         self.output = ""
@@ -310,8 +314,9 @@ class State:
                 "pulse": self.pulse_track() is not None,
                 "under": self.under, "placingOn": self.placing_track() is not None,
                 "terrainOn": self.terrain_track() is not None,
+                "clockOn": self.clock_on,
                 "placing": self.placing_info(),
-                "videoLength": self.video_length(), "leadIn": LEAD_IN,
+                "videoLength": self.video_length(), "leadIn": LEAD_IN, "afterFinish": AFTER_FINISH,
                 "previewSeconds": PREVIEW_SECONDS,
                 "output": self.output, "quality": self.quality,
                 "fast4k": self.fast4k, "canFast": self._can_fast(),
@@ -327,8 +332,14 @@ class State:
     def video_length(self) -> float:
         if not self.hc_tl or self.hc_sync is None:
             return 0.0
-        end = self.end_time if self.end_time is not None else self.hc_tl.duration
-        return max(0.0, end - max(0.0, self.hc_sync - LEAD_IN))
+        return max(0.0, self.video_end() - max(0.0, self.hc_sync - LEAD_IN))
+
+    def video_end(self) -> float:
+        """Där videon slutar i headcam-filmen: 5 s efter målgången, eller filmens slut.
+        Banden och klockan använder själva målgången (end_time)."""
+        if self.end_time is None:
+            return self.hc_tl.duration
+        return min(self.hc_tl.duration, self.end_time + AFTER_FINISH)
 
     def pulse_track(self) -> Optional[PulseTrack]:
         if self.under != "pulse" or self.hr is None or self.fit_start is None or self.hc_sync is None or not self.hc_tl:
@@ -392,13 +403,34 @@ class State:
                 "consent": self.consent, "summary": splitmod.summary(sp),
                 "saved": splitmod.load_me() is not None, "max": splitmod.MAX_SHOWN}
 
+    def official_time(self) -> Optional[float]:
+        """Din sluttid från de inklistrade sträcktiderna (om du har valt dig själv)."""
+        me = self._index(self.me)
+        if me is None:
+            return None
+        r = self.splits.runners[me]
+        # Som placeringslinjen: bara en godkänd löpare (inte mp, dns …) har en officiell tid.
+        if not r.selectable or r.status != "ok":
+            return None
+        t = r.splits[-1] if r.splits and r.splits[-1] is not None else r.time
+        return float(t) if t else None
+
+    def clock_track(self) -> Optional[ClockTrack]:
+        if not self.clock_on or self.hc_sync is None:
+            return None
+        return ClockTrack(race_start=self.hc_sync, finish=self.end_time,
+                          official=self.official_time())
+
     def make_job(self, output: str) -> Job:
         return Job(headcam_files=[c.path for c in self.hc_tl.clips],
                    livelox_file=self.ll_tl.clips[0].path, output_file=output,
                    headcam_sync=self.hc_sync or 0.0, livelox_sync=self.ll_sync or 0.0,
-                   lead_in=LEAD_IN, end_time=self.end_time, livelox_width=self.livelox_width,
+                   lead_in=LEAD_IN,
+                   end_time=None if self.end_time is None else self.video_end(),
+                   livelox_width=self.livelox_width,
                    headcam_flip=self.hc_flip, pulse=self.pulse_track(),
-                   placing=self.placing_track(), terrain=self.terrain_track())
+                   placing=self.placing_track(), terrain=self.terrain_track(),
+                   clock=self.clock_track())
 
     # --- åtgärder från sidan ---
     def check_tools(self) -> None:
@@ -526,6 +558,11 @@ class State:
         if what in ("none", "pulse", "terrain", "placing"):
             with self.lock:
                 self.under = what
+        return {}
+
+    def set_clock(self, body) -> Dict[str, Any]:
+        with self.lock:
+            self.clock_on = bool((body or {}).get("on"))
         return {}
 
     def set_splits(self, body) -> Dict[str, Any]:
@@ -705,8 +742,7 @@ class State:
                 job.tail_seconds = PREVIEW_SECONDS
             elif kind == "here":
                 t = float(body.get("t", self.hc_sync))
-                limit = self.end_time if self.end_time is not None else self.hc_tl.duration
-                job.end_time = min(limit, t + PREVIEW_SECONDS / 2)
+                job.end_time = min(self.video_end(), t + PREVIEW_SECONDS / 2)
                 job.tail_seconds = PREVIEW_SECONDS
             else:
                 job.end_time = min(job.end_time or self.hc_tl.duration,
@@ -1047,7 +1083,7 @@ def fmt_estimate(seconds: Optional[float]) -> str:
 ACTIONS = ("pick_headcam", "pick_livelox", "load", "pick_fit", "load_fit", "remove_fit", "mark",
            "set_flip", "set_width", "nudge", "set_quality", "set_fast", "set_output", "pick_output",
            "open_help", "open_output", "preview", "make", "cancel_render", "bench",
-           "accept_terms", "decline_terms", "set_under", "set_splits", "set_me", "forget_me",
+           "accept_terms", "decline_terms", "set_under", "set_clock", "set_splits", "set_me", "forget_me",
            "set_shown", "preset_shown", "set_consent")
 # Det enda som går att göra innan villkoren är godkända (Avsluta sköts av /api/bye).
 BEFORE_TERMS = ("accept_terms", "decline_terms", "open_help")
@@ -1431,7 +1467,9 @@ def _placing_selftest() -> str:
         sp = splitmod.parse(SELFTEST_SPLITS)
         track = PlacingTrack(sp, [1], 0, True, race_start=0.0)
         out = os.path.join(folder, "placering.mp4")
-        render(Job([clips[0]], clips[1], out, lead_in=0, placing=track))
+        # Klockan följer med här (drawtext med uppräknande tid och stoppurets bild).
+        clock = ClockTrack(race_start=0.5, finish=2.5, official=6.0)
+        render(Job([clips[0]], clips[1], out, lead_in=0, placing=track, clock=clock))
         return f"Placeringsvideo: {os.path.getsize(out)} byte"
     finally:
         shutil.rmtree(folder, ignore_errors=True)
