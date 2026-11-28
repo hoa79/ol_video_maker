@@ -4,6 +4,8 @@
    placering ändras från kontroll till kontroll.
 2. **Garmin-instruktionen** visar rätt menyval: **Export File**.
 3. **Livelox-instruktionen** visar alla nio stegen i en lista som du rullar i.
+4. **Snabbare steg 5:** programmet minns hur snabb datorn är, så tidsuppskattningen
+   behöver inte provkoda varje gång.
 
 ## Så kommer du igång
 
