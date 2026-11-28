@@ -280,7 +280,7 @@ const LIVELOX_GUIDE = [
 const FIT_STEPS = [
   "Gå till connect.garmin.com i webbläsaren och logga in.",
   "Öppna aktiviteten för ditt lopp.",
-  "Klicka på kugghjulet uppe till höger och välj Exportera original.",
+  "Klicka på kugghjulet uppe till höger och välj Export File.",
   "Du får en zip-fil. Välj den direkt här i programmet (eller packa upp .fit-filen först).",
 ];
 function stepsModal(title, intro, steps, foot) {
