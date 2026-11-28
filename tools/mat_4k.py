@@ -81,6 +81,13 @@ def run(seconds):
     tot = time.monotonic() - t
     os.remove(out)
     mv = [m for m in marks if 0 < m[1] < 1]
+    if seconds > 60 and len(mv) > 10:  # fart per tiondel, för att se om den sjunker med tiden
+        parts, last = [], mv[0]
+        for m in mv[1:]:
+            if m[1] - last[1] >= 0.1:
+                parts.append(round((m[1] - last[1]) * seconds / (m[0] - last[0]), 2))
+                last = m
+        print(json.dumps({"fart_per_tiondel": parts}), flush=True)
     steady = ((mv[-1][1] - mv[0][1]) * seconds / (mv[-1][0] - mv[0][0])) if len(mv) >= 2 else 0
     return steady, seconds / tot, tot, logs
 
