@@ -37,7 +37,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, speedcache, villkor
+from . import __version__, speedcache, vila, villkor
 from .core import (DEFAULT_LIVELOX_WIDTH, OUT_W, Job, MediaInfo, VideoMakerError, check_tools,
                    ensure_mp4, find_tool, format_time, is_packaged, probe, render,
                    sort_headcam_files)
@@ -268,7 +268,7 @@ class State:
         self.cancel = False
         self.proc: Optional[subprocess.Popen] = None
         self.render: Dict[str, Any] = {"kind": None, "text": "", "progress": 0.0, "ok": None,
-                                       "path": None, "error": None, "seq": 0}
+                                       "path": None, "error": None, "slept": 0, "awake": False, "seq": 0}
         self.current_output = ""
         # Villkoren (ansvarsfriskrivningen) måste godkännas innan programmet används.
         self.terms_accepted = villkor.is_accepted()
@@ -718,17 +718,23 @@ class State:
             self.cancel = False
             self.current_output = job.output_file
             self.render = {"kind": kind, "text": text, "progress": 0.0, "ok": None, "path": None,
-                           "error": None, "seq": self.render["seq"] + 1}
+                           "error": None, "slept": 0, "awake": False, "seq": self.render["seq"] + 1}
+
+        meter = vila.SleepMeter()
 
         def progress(p: float) -> None:
             self.render["progress"] = p
+            self.render["slept"] = round(meter.slept())
 
         def work():
             path, error = None, None
-            started = time.monotonic()
             try:
-                path = render(job, progress=progress, cancel_flag=lambda: self.cancel,
-                              on_process=lambda p: setattr(self, "proc", p))
+                # Datorn får inte somna medan videon skapas (skärmen får släckas). Måste
+                # börja och sluta i samma tråd som gör jobbet.
+                with vila.keep_awake() as awake:
+                    self.render["awake"] = awake  # visas som en rad i steg 5
+                    path = render(job, progress=progress, cancel_flag=lambda: self.cancel,
+                                  on_process=lambda p: setattr(self, "proc", p))
             except VideoMakerError as e:
                 error = str(e)
             except Exception as e:
@@ -737,6 +743,7 @@ class State:
                 self.running = False
                 self.proc = None
                 r = dict(self.render)
+                r["slept"] = round(meter.slept())
                 if error:
                     r.update(ok=False, error=None if error == "Avbrutet." else error,
                              text="Avbrutet." if error == "Avbrutet."
@@ -745,7 +752,7 @@ class State:
                     r.update(ok=True, path=path, progress=1.0,
                              text=f"✓ Klart! Sparad som {os.path.basename(path)}")
                 self.render = r
-            elapsed = time.monotonic() - started
+            elapsed = meter.awake()  # tid i viloläge ska inte göra datorn "långsammare"
             if path and speed_key and length >= MIN_LEARN_SECONDS and elapsed > 1:
                 # En riktig video är den bästa mätningen: spara den till nästa gång.
                 speedcache.put(speed_key, length / elapsed, source="video")
@@ -961,7 +968,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._static(u.path[len("/static/"):])
         if not self._token_ok(q):
             return self._send(403, b"", "text/plain")
-        self.server.last_contact = time.monotonic()
+        self.server.last_contact = vila.awake_time()
         if u.path == "/api/state":
             self.server.closed = False  # sidan lever (t.ex. laddades om)
             return self._json(self.server.state.snapshot())
@@ -986,7 +993,7 @@ class Handler(BaseHTTPRequestHandler):
         u = urlparse(self.path)
         if not self._token_ok(parse_qs(u.query)) or not u.path.startswith("/api/"):
             return self._send(403, b"", "text/plain")
-        self.server.last_contact = time.monotonic()
+        self.server.last_contact = vila.awake_time()
         name = u.path[len("/api/"):]
         if name == "bye":
             self.server.closed = True
@@ -1149,11 +1156,13 @@ def main() -> None:
         proc = None
     else:
         proc = open_window(server.url)
-    started = time.monotonic()
+    # Klockan står still medan datorn sover, så en lång vila räknas inte som att fönstret
+    # har varit tyst (då avbröts videon förut när datorn vaknade).
+    started = vila.awake_time()
     try:
         while True:
             dialogs.run_pending(0.3)
-            now = time.monotonic()
+            now = vila.awake_time()
             alive = proc is not None and proc.poll() is None
             if state.quit_requested:
                 time.sleep(0.5)  # låt sidan få svaret och försöka stänga fönstret själv

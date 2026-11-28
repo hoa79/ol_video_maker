@@ -180,6 +180,9 @@ Du kan alltid klicka på **Tillbaka** och ändra.
       skarpare men tar längre tid och ger en större fil.
    2. Kontrollera var videon sparas. Klicka på **Ändra…** om du vill spara den någon annanstans.
    3. Klicka på den stora knappen **Skapa videon**.
+      Datorn hålls vaken tills videon är klar, men skärmen får släckas. Fäll inte ner locket
+      på en bärbar dator, för då somnar den ändå. Har datorn sovit en stund fortsätter videon
+      där den var när datorn vaknar, och programmet skriver hur länge den sov.
    4. När videon är klar, klicka på **Titta på videon** eller **Öppna mappen**.
    Med pulsfil visas hela loppets pulskurva i det svarta fältet under headcam-bilden. Den stora
    siffran till vänster är pulsen just då, och det röda hjärtat på kurvan slår i samma takt

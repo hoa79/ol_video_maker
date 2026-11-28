@@ -166,6 +166,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px var(-
 .rstatus span{flex:1;min-width:0;overflow-wrap:anywhere}
 .rstatus.ok{color:var(--ok);font-weight:600}
 .rstatus.bad{color:var(--error)}
+.sleepline{margin-top:6px;font-size:13.5px;color:var(--muted)}
 
 /* ---------- steg 5 ---------- */
 .summary{flex-direction:row;gap:44px;padding:16px 26px;flex:none}

@@ -958,13 +958,22 @@ const EndPage = {
   },
 };
 
+const CHEERS = [
+  "🏃 Medan videon skapas passar det perfekt att träna ett pass till!",
+  "🧭 Medan videon skapas hinner du ta en löprunda och hitta alla kontroller igen.",
+  "🍫 Medan videon skapas: dags för en kanelbulle, du har förtjänat den!",
+  "🗺️ Medan videon skapas kan du rita in ditt vägval på kartan och se var tiden försvann.",
+];
+
 // Förloppet när en video skapas (provvideo i steg 4, riktig video i steg 5).
 function renderPanel(kind) {
   const bar = h("i"), prog = h("div", {class: "progress"}, bar);
   const text = h("span"), cancel = h("button", {class: "ghost", onclick: () => api("cancel_render")}, "Avbryt");
   const row = h("div", {class: "rstatus"}, text, cancel);
   const open = h("button", {class: "ghost lg", style: "margin-top:8px", onclick: () => api("open_output")}, "▶ Öppna provvideon");
-  const el = h("div", {}, prog, row, open);
+  // Viloläge (bara i steg 5): datorn hålls vaken, eller så har den ändå sovit en stund.
+  const sleep = h("div", {class: "sleepline"}), fun = h("div", {class: "sleepline"});
+  const el = h("div", {}, prog, row, sleep, fun, open);
   el.hidden = true;
   return {el, update() {
     const r = S.render, mine = r.kind === kind;
@@ -979,6 +988,18 @@ function renderPanel(kind) {
     // Provvideo: bara "Klart!" och en knapp (ett långt filnamn bryts annars mitt i ordet).
     if (kind === "preview" && r.ok === true) text.textContent = "✓ Klart! Provvideon öppnas.";
     open.hidden = !(kind === "preview" && r.ok === true && !S.running);
+    const mins = Math.round((r.slept || 0) / 60);
+    if (kind !== "make") sleep.textContent = "";
+    else if (mins >= 1) {
+      const m = mins === 1 ? "1 minut" : `${mins} minuter`;
+      sleep.textContent = S.running ? `⚠ Datorn sov i ${m}. Videon fortsätter där den var, men blir klar lite senare.`
+        : `⚠ Datorn sov i ${m} medan videon skapades.`;
+    } else sleep.textContent = S.running && r.awake
+      ? "☾ Datorn hålls vaken tills videon är klar. Fäll inte ner locket på en bärbar dator." : "";
+    sleep.hidden = !sleep.textContent;
+    // En glad uppmaning medan videon skapas (samma under hela videon, en annan nästa gång).
+    fun.textContent = kind === "make" && S.running ? CHEERS[r.seq % CHEERS.length] : "";
+    fun.hidden = !fun.textContent;
   }};
 }
 
