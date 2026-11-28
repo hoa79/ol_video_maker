@@ -116,6 +116,32 @@ class WebAppTest(unittest.TestCase):
         s = self.post("set_width", {"width": 707})["state"]
         self.assertEqual(s["liveloxWidth"], 700)
 
+    def test_terrain_from_fit(self):
+        from ol_video_maker.fitfile import write_fit
+        folder = tempfile.mkdtemp()
+        fit = os.path.join(folder, "lopp.fit")
+        t0 = 1795888000
+        write_fit(fit, [(t0 + s, 150) for s in range(120)],
+                  [(30 + s * 0.2, 2.0 + (s % 60) / 30) for s in range(120)])
+        self.post("set_under", {"what": "terrain"})
+        self.post("load_fit", {"file": fit})
+        for _ in range(100):
+            s = json.loads(self.get("/api/state")[2])
+            if s["hr"]:
+                break
+            threading.Event().wait(0.1)
+        self.assertEqual(s["under"], "terrain")   # valet står kvar när filen har höjd och fart
+        ter = s["hr"]["terrain"]
+        self.assertEqual(ter["altMin"], 30)
+        self.assertAlmostEqual(ter["altMax"], 54, delta=1.5)   # utjämnad
+        self.assertEqual(len(ter["profile"]), 120)
+        self.assertTrue(ter["profile"][0][1].startswith("#"))
+        data = json.loads(self.get("/api/terrain")[2])
+        self.assertEqual(len(data["alt"]), len(data["speed"]))
+        self.assertFalse(s["terrainOn"])          # inte synkat än
+        self.post("remove_fit", {})
+        self.post("set_under", {"what": "none"})
+
 
 class VillkorTest(WebAppTest):
     """Första start: villkoren måste godkännas innan något annat går att göra."""

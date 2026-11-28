@@ -514,7 +514,8 @@ const FilesPage = {
       this.cards[which] = c;
       row.append(c.el);
     }
-    // 3. Under videon (frivilligt): ingenting, puls eller placering. Fältet räcker till en sak.
+    // 3. Under videon (frivilligt): ingenting, puls, höjd och fart eller placering. Fältet
+    // räcker till en sak. Puls och höjd och fart läses ur samma .fit-fil från klockan.
     this.p = {};
     const p = this.p;
     p.opts = {};
@@ -528,10 +529,11 @@ const FilesPage = {
     // Puls: pulsfilen från klockan
     p.status = h("div", {class: "okline"});
     p.facts = h("div", {class: "facts"});
+    p.profile = h("div", {class: "tprofile"});
     p.remove = h("button", {class: "ghost lg", onclick: () => api("remove_fit")}, "Ta bort");
     p.pick = h("button", {class: "big", onclick: () => api("pick_fit")}, "Välj pulsfil…");
     p.pulse = h("div", {class: "udetail"},
-      h("div", {class: "pulsemid"}, p.status, p.facts,
+      h("div", {class: "pulsemid"}, p.status, p.facts, p.profile,
         h("a", {class: "link", onclick: fitHelp}, "Hur hämtar jag .fit-filen från Garmin?")),
       h("div", {class: "btnrow"}, p.remove, p.pick));
     // Placering: sträcktider från Livelox (klistras in på nästa sida)
@@ -544,8 +546,8 @@ const FilesPage = {
       h("div", {class: "uopts"},
         opt("none", "", "Ingenting", "Bara film och karta"),
         opt("pulse", HEART_SVG(15), "Puls", ".fit-fil från klockan"),
-        opt("placing", "🏃", "Placering", "Sträcktider från Livelox"),
-        opt("more", "⌚", "Mer från klockan", "Kommer senare", true)),
+        opt("terrain", "⛰️", "Höjd och fart", ".fit-fil från klockan"),
+        opt("placing", "🏃", "Placering", "Sträcktider från Livelox")),
       p.pulse, p.placing);
     root.append(row, under);
     this.shown = {};
@@ -587,21 +589,35 @@ const FilesPage = {
     }
     const p = this.p, hr = S.hr, err = S.errors.fit;
     for (const [what, el] of Object.entries(p.opts)) el.classList.toggle("on", S.under === what);
-    p.pulse.hidden = S.under !== "pulse";
+    const watch = S.under === "pulse" || S.under === "terrain";
+    p.pulse.hidden = !watch;
+    const ter = hr && hr.terrain;
+    const noTerrain = S.under === "terrain" && hr && !ter;
     p.placing.hidden = S.under !== "placing";
     if (S.loading.fit) { p.status.className = "okline wait"; p.status.textContent = "Läser filen…"; }
     else if (err) { p.status.className = "okline err"; p.status.textContent = "⚠ " + err; }
+    else if (noTerrain) {
+      p.status.className = "okline err";
+      p.status.textContent = `⚠ ${hr.name} saknar höjd eller fart. Hade klockan GPS på under loppet?`;
+    }
     else if (hr) { p.status.className = "okline"; p.status.textContent = "✓ " + hr.name; }
     else { p.status.className = "okline wait"; p.status.textContent = "Välj filen (.fit) från din klocka."; }
     p.facts.hidden = !hr;
     if (hr) {
-      p.facts.innerHTML = `<span>Start <b>${day(hr.start)} ${clock(hr.start, false)}</b></span>` +
-        `<span>Längd <b>${hr.minutes} min</b></span><span>Puls <b>${hr.min}–${hr.max}</b> slag/min</span>`;
+      const head = `<span>Start <b>${day(hr.start)} ${clock(hr.start, false)}</b></span>` +
+        `<span>Längd <b>${hr.minutes} min</b></span>`;
+      p.facts.innerHTML = S.under === "terrain" && ter
+        ? head + `<span>Höjd <b>${ter.altMin}–${ter.altMax} m</b></span>` +
+          `<span>Fart <b>${esc(ter.fast)}–${esc(ter.slow)}</b> min/km</span>`
+        : head + `<span>Puls <b>${hr.min}–${hr.max}</b> slag/min</span>`;
       p.pick.className = "ghost lg"; p.pick.textContent = "Byt fil…";
     } else {
       p.pick.className = S.hc && S.ll ? "big" : "big second"; p.pick.textContent = "Välj pulsfil…";
     }
     p.remove.hidden = !hr;
+    const showProf = S.under === "terrain" && !!ter;
+    p.profile.hidden = !showProf;
+    if (showProf && p.profile._id !== hr.id) { p.profile._id = hr.id; p.profile.innerHTML = terrainStrip(ter); }
     const pl = S.placing;
     if (pl && pl.runners.length) {
       const n = pl.shown.length + (pl.meIndex !== null && pl.meIndex !== undefined ? 1 : 0);
@@ -614,9 +630,25 @@ const FilesPage = {
       p.pbtn.textContent = "Klistra in sträcktider…";
     }
     p.remove.hidden = !hr;
-    setDone(p.num, (S.under === "pulse" && hr) || (S.under === "placing" && pl && pl.runners.length));
+    setDone(p.num, (S.under === "pulse" && hr) || (S.under === "terrain" && ter) ||
+      (S.under === "placing" && pl && pl.runners.length));
   },
 };
+
+// Liten höjdprofil i steg 1: ytan färgad efter farten (blå = långsamt, röd = snabbt).
+function terrainStrip(ter) {
+  const w = 520, hh = 34, pr = ter.profile, n = pr.length;
+  const span = Math.max(1, ter.altMax - ter.altMin);
+  let out = `<svg viewBox="0 0 ${w} ${hh}" preserveAspectRatio="none" role="img" aria-label="Höjdprofil färgad efter farten">`;
+  for (let i = 0; i < n - 1; i++) {
+    const a = pr[i], b = pr[i + 1];
+    if (!a || !b) continue;
+    const x0 = w * i / (n - 1), x1 = w * (i + 1) / (n - 1) + 0.6;
+    const y0 = hh - 3 - (hh - 8) * (a[0] - ter.altMin) / span, y1 = hh - 3 - (hh - 8) * (b[0] - ter.altMin) / span;
+    out += `<path d="M${x0.toFixed(1)} ${hh}L${x0.toFixed(1)} ${y0.toFixed(1)}L${x1.toFixed(1)} ${y1.toFixed(1)}L${x1.toFixed(1)} ${hh}Z" fill="${a[1]}"/>`;
+  }
+  return out + "</svg>";
+}
 
 // --- 1b. Placering (bara om man valt Placering under videon) ---
 const SPLIT_STEPS = [
@@ -783,7 +815,7 @@ const PulsePage = {
   number: 2, kicker: "Steg 2 av 5 · Puls", optional: true, title: "Hitta starten i pulsen", nextStep: 3,
   sub: true, tip: "Klart! Tryck på Nästa.",
   lead: "Klockan vet inte var filmen börjar. Dra den lila linjen till där loppet startar. Där brukar pulsen <b>stiga brant</b>.",
-  active: () => S.under === "pulse" && !!S.hr,
+  active: () => (S.under === "pulse" || S.under === "terrain") && !!S.hr,
   ready() { return S.hr && S.fitStart === null ? "Dra linjen och tryck på <b>Starten är här</b>." : null; },
   ML: 46, MR: 18, MT: 38, MB: 30,
   build(root) {
@@ -1077,7 +1109,7 @@ const PreviewPage = {
     this.panel.update();
     setDone(this.n2, S.render.kind === "preview" && S.render.ok === true);
     this.layout();
-    const pk = `${S.flip}|${S.pulse}|${S.placingOn}|${S.llSync}`;
+    const pk = `${S.flip}|${S.pulse}|${S.placingOn}|${S.terrainOn}|${S.llSync}`;
     if (this._pk !== pk) { this._pk = pk; this.refresh(); }
   },
   layout() {
@@ -1087,7 +1119,7 @@ const PreviewPage = {
     if (W * 9 > H * 16) W = H * 16 / 9; else H = W * 9 / 16;
     const x0 = (r.width - W) / 2, y0 = 0;
     const lw = W * this.width() / S.outW, hw = W - lw;
-    const hb = S.pulse || S.placingOn ? H - H * 180 / 1080 : H;   // fältet under headcam, som i videon
+    const hb = S.pulse || S.placingOn || S.terrainOn ? H - H * 180 / 1080 : H;   // fältet under headcam, som i videon
     Object.assign(this.frame.style, {left: x0 + "px", top: y0 + "px", width: W + "px", height: H + "px"});
     // Headcam mitt i höjd men ovanför pulsbandet; kartan i sin kolumn till höger.
     let ih = Math.min(hb, hw * 9 / 16);
@@ -1107,6 +1139,7 @@ const PreviewPage = {
     const g = this.geom, svg = this.band;
     this.credit.textContent = S.placingOn ? "Karta och sträcktider: Livelox" : "Karta: Livelox";
     if (S.placingOn && g) return this.drawPlacing();
+    if (S.terrainOn && g) return this.drawTerrain();
     if (!S.pulse || !g) { svg.innerHTML = ""; return; }
     svg.removeAttribute("viewBox");
     if (!this.pdata || this.pdata.id !== S.hr.id) this.pdata = await (await fetch(url("/api/pulse", {}))).json();
@@ -1144,6 +1177,74 @@ const PreviewPage = {
     out += `<text x="${30 * k}" y="${gy0 + 52 * k}" style="fill:#ff5a6a;font-weight:700;font-size:${Math.max(10, 60 * k)}px">${v === null ? "–" : Math.round(v)}</text>`;
     out += `<text x="${32 * k}" y="${gy0 + 94 * k}" style="fill:#fff;font-size:${Math.max(8, 22 * k)}px">slag/min</text>`;
     out += `<text x="${32 * k}" y="${gy0 + 122 * k}" style="fill:#8a8a8a;font-size:${Math.max(7, 18 * k)}px">max ${Math.round(hi - 4)}</text>`;
+    svg.innerHTML = out;
+  },
+  async drawTerrain() {
+    // Samma mått som i videon (terrain_video.py), skalade till förhandsbilden.
+    const g = this.geom, svg = this.band;
+    svg.removeAttribute("viewBox");
+    if (!this.tdata || this.tdata.id !== S.hr.id) this.tdata = await (await fetch(url("/api/terrain", {}))).json();
+    const d = this.tdata, k = g.W / 1920, off = S.fitStart - S.hcSync;
+    svg.setAttribute("width", g.W); svg.setAttribute("height", g.H);
+    const at = (t) => {
+      const f = (t - d.start) / d.step, i = Math.floor(f);
+      if (!d.alt || i < 0 || i >= d.alt.length - 1 || d.alt[i] === null || d.alt[i + 1] === null) return null;
+      const u = f - i;
+      return [d.alt[i] + u * (d.alt[i + 1] - d.alt[i]), d.speed[i] + u * (d.speed[i + 1] - d.speed[i])];
+    };
+    const [g0, g1] = this.span(), tNow = +this.range.value;
+    const gx = 200 * k, gw = g.hw - 270 * k, gy = (1080 - 180 + 40) * k, gh = 124 * k, pad = 10 * k;
+    if (gw < 20 || g1 <= g0) { svg.innerHTML = ""; return; }
+    let aLo = Infinity, aHi = -Infinity; const sp = [];
+    for (let t = g0; t <= g1; t += Math.max(1, (g1 - g0) / 600)) {
+      const v = at(t + off); if (v === null) continue;
+      aLo = Math.min(aLo, v[0]); aHi = Math.max(aHi, v[0]); sp.push(v[1]);
+    }
+    if (!sp.length) { svg.innerHTML = ""; return; }
+    sp.sort((a, b) => a - b);
+    let sLo = sp[Math.floor(0.05 * (sp.length - 1))], sHi = sp[Math.floor(0.95 * (sp.length - 1))];
+    if (aHi - aLo < 20) { const m = (aHi + aLo) / 2; aLo = m - 10; aHi = m + 10; }
+    if (sHi - sLo < 0.3) { sLo -= 0.15; sHi += 0.15; }
+    const col = (s) => `hsl(${230 * (1 - Math.max(0, Math.min(1, (s - sLo) / (sHi - sLo))))},95%,55%)`;
+    const yOf = (a) => gy + pad + (aHi - a) / (aHi - aLo) * (gh - 2 * pad);
+    const n = Math.max(2, Math.floor(gw / 3)), bot = gy + gh;
+    let out = "", line = [], grey = [];
+    for (let i = 0; i < n; i++) {
+      const t = g0 + (g1 - g0) * i / n, t2 = g0 + (g1 - g0) * (i + 1) / n, v = at(t + off), v2 = at(t2 + off);
+      if (v === null || v2 === null) continue;
+      const x = gx + gw * i / n, x2 = gx + gw * (i + 1) / n + 0.5, y = yOf(v[0]), y2 = yOf(v2[0]);
+      const past = t < tNow;
+      out += `<path d="M${x.toFixed(1)} ${bot}L${x.toFixed(1)} ${y.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}L${x2.toFixed(1)} ${bot}Z" fill="${past ? col(v[1]) : "#2a2a2a"}"/>`;
+      (past ? line : grey).push([x, y]);
+    }
+    const pl = (pts) => pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join("");
+    if (grey.length > 1) out += `<path d="${pl(grey)}" fill="none" stroke="#666" stroke-width="${Math.max(1, 2 * k)}"/>`;
+    if (line.length > 1) out += `<path d="${pl(line)}" fill="none" stroke="#fff" stroke-width="${Math.max(1, 2.2 * k)}"/>`;
+    const v = at(tNow + off);
+    const lx = 32 * k, ly = (1080 - 180 + 136) * k, lw = 150 * k;
+    let stops = "";
+    for (let i = 0; i <= 10; i++) stops += `<stop offset="${i / 10}" stop-color="${col(sLo + (sHi - sLo) * i / 10)}"/>`;
+    out += `<defs><linearGradient id="tsk">${stops}</linearGradient></defs>`;
+    out += `<rect x="${lx}" y="${ly}" width="${lw}" height="${8 * k}" rx="${4 * k}" fill="url(#tsk)"/>`;
+    const fs = (px, min) => Math.max(min, px * k);
+    out += `<text x="${lx}" y="${ly + 24 * k}" style="fill:#9aa;font-size:${fs(15, 6)}px">långsamt</text>`;
+    out += `<text x="${lx + lw}" y="${ly + 24 * k}" text-anchor="end" style="fill:#9aa;font-size:${fs(15, 6)}px">snabbt</text>`;
+    out += `<text x="${32 * k}" y="${(1080 - 180 + 118) * k}" style="fill:#ddd;font-size:${fs(21, 7)}px">min/km</text>`;
+    let txt = "–", tc = "#fff";
+    if (v !== null && tNow >= g0 && tNow <= g1) {
+      const sec = v[1] > 1000 / 1800 ? Math.round(1000 / v[1]) : null;
+      if (sec !== null) txt = `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+      tc = col(v[1]);
+      const f = Math.max(0, Math.min(1, (v[1] - sLo) / (sHi - sLo))), px = lx + f * lw;
+      out += `<path d="M${px - 6.5 * k} ${ly - 10 * k}L${px + 6.5 * k} ${ly - 10 * k}L${px} ${ly - 1 * k}Z" fill="#fff"/>`;
+      // Löparen (stillbild), fötterna på kurvan.
+      const fx = gx + gw * (tNow - g0) / (g1 - g0), fy = yOf(v[0]) + 2 * k, s = 1.9 * k;
+      const fig = "M0,-22L5,-12L1,-1M0,-22L-5,-12L-11,-11M0,-22L3,-38M3,-38L-3,-32L3,-30M3,-38L9,-33L14,-36";
+      out += `<g transform="translate(${fx.toFixed(1)} ${fy.toFixed(1)}) scale(${s})" fill="none" stroke-linecap="round" stroke-linejoin="round">` +
+        `<path d="${fig}" stroke="#000" stroke-width="6.5"/><circle cx="5.5" cy="-45" r="5.6" fill="#000" stroke="none"/>` +
+        `<path d="${fig}" stroke="#fff" stroke-width="3.4"/><circle cx="5.5" cy="-45" r="4.2" fill="#fff" stroke="none"/></g>`;
+    }
+    out += `<text x="${30 * k}" y="${(1080 - 180 + 88) * k}" style="fill:${tc};font-weight:700;font-size:${fs(66, 10)}px">${txt}</text>`;
     svg.innerHTML = out;
   },
   async drawPlacing() {
@@ -1209,6 +1310,7 @@ const CreatePage = {
     if (S.flip) vals.push(["Headcam", "Vänd 180°"]);
     if (S.pulse) vals.push(["Under videon", "♥ Puls"]);
     if (S.placingOn) vals.push(["Under videon", "🏃 Placering"]);
+    if (S.terrainOn) vals.push(["Under videon", "⛰️ Höjd och fart"]);
     this.sum.innerHTML = vals.map(([l, v]) => `<div>${l}<b>${esc(v)}</b></div>`).join("");
     for (const c of this.choices) {
       c.el.className = "choice" + (S.quality === c.q ? " on" : "");

@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Callable, List, Optional, Sequence, Tuple
 if TYPE_CHECKING:  # pragma: no cover
     from .placing_video import PlacingTrack
     from .pulse_video import PulseTrack
+    from .terrain_video import TerrainTrack
 
 OUT_W = 1920
 OUT_H = 1080
@@ -457,6 +458,7 @@ class Job:
     scale: int = 1                    # 1 = Full HD (1920x1080), 2 = 4K (3840x2160)
     pulse: Optional["PulseTrack"] = None  # puls från klockan (frivilligt), se pulse_video.py
     placing: Optional["PlacingTrack"] = None  # placeringslinjen (frivilligt), placing_video.py
+    terrain: Optional["TerrainTrack"] = None  # höjd och fart (frivilligt), terrain_video.py
 
 
 @dataclass
@@ -469,6 +471,7 @@ class Plan:
     credit_drawn: bool = False
     pulse_drawn: bool = False
     placing_drawn: bool = False
+    terrain_drawn: bool = False
 
 
 def _even(x: float) -> int:
@@ -494,8 +497,9 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
         )
     if not (160 <= job.livelox_width <= OUT_W - 640):
         raise VideoMakerError("Livelox-kolumnens bredd måste vara mellan 160 och 1280 pixlar.")
-    if job.pulse is not None and job.placing is not None:
-        raise VideoMakerError("Fältet under videon räcker till en sak: välj puls eller placering.")
+    if sum(x is not None for x in (job.pulse, job.placing, job.terrain)) > 1:
+        raise VideoMakerError("Fältet under videon räcker till en sak: välj puls, höjd och fart "
+                              "eller placering.")
     if job.scale not in (1, 2):
         raise VideoMakerError("Upplösningen måste vara Full HD eller 4K.")
     # Full HD (1920x1080) eller 4K (3840x2160): allt mäts i Full HD-pixlar och skalas upp.
@@ -579,6 +583,17 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
         band = build_band(job.pulse, tmpdir, k, hc_box_w, H, start, duration, first,
                           fps=segments[0][0].fps)
         cmd += band.inputs
+    tband = None
+    if job.terrain is not None:
+        from .terrain_video import BAND_H as TBAND_H, build_band as build_terrain
+        hc_box_h = H - TBAND_H * k
+        if tmpdir is None:
+            tmpdir = tempfile.mkdtemp(prefix="olvm_hojd_")
+            temp_files.append(tmpdir)
+        first = ll_idx + 1 + (0 if hc_audio else 1)
+        tband = build_terrain(job.terrain, tmpdir, k, hc_box_w, H, start, duration, first,
+                              (font, bold_font), _escape_filter_value, fps=segments[0][0].fps)
+        cmd += tband.inputs
 
     chains: List[str] = []
     if n_hc == 1:
@@ -675,6 +690,11 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
         overlay += pband.overlays
         chains += pband.chains
         placing_drawn = True
+    terrain_drawn = False
+    if tband is not None:
+        overlay += tband.overlays
+        chains += tband.chains
+        terrain_drawn = True
     overlay += ",format=yuv420p[v]"
     filtergraph = ";".join(chains + [hc_chain, ll_chain, overlay])
 
@@ -692,7 +712,7 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
     ]
     return Plan(cmd=cmd, duration=duration, encoder=encoder, hwaccel=hwaccel,
                 temp_files=temp_files, credit_drawn=credit_drawn, pulse_drawn=pulse_drawn,
-                placing_drawn=placing_drawn)
+                placing_drawn=placing_drawn, terrain_drawn=terrain_drawn)
 
 
 # ---------------------------------------------------------------------------
@@ -772,7 +792,8 @@ def render(job: Job, progress: Optional[ProgressCallback] = None,
     if job.placing is not None and not has_filter("ass"):
         raise VideoMakerError("Den här ffmpeg kan inte rita placeringslinjen (filtret ass "
                               "saknas). Använd ffmpeg som följer med programmet.")
-    if (job.credit_text or job.pulse is not None or job.placing is not None) \
+    if (job.credit_text or job.pulse is not None or job.placing is not None
+            or job.terrain is not None) \
             and has_filter("drawtext"):
         font = find_font()
         bold_font = find_font(bold=True)

@@ -7,10 +7,10 @@ bibliotek behövs: servern är Pythons egen http.server, och filväljarna är Wi
 (via tkinter som redan följer med Python).
 
 Guiden har fem steg:
-1. Välj filmer (och frivilligt vad som visas under filmen: puls eller placering)
+1. Välj filmer (och frivilligt vad som visas under filmen: puls, höjd och fart eller placering)
    1b. Placering (bara om man valt placering): klistra in sträcktider från Livelox
 2. Synka starten (bläddra fram samma ögonblick i båda filmerna)
-   2b. Synka pulsen (bara om man valt en pulsfil)
+   2b. Synka pulsen (bara om man valt puls eller höjd och fart: klockan synkas med pulsen)
 3. Välj slutet
 4. Titta på en provbit
 5. Skapa videon
@@ -42,10 +42,11 @@ from .core import (DEFAULT_LIVELOX_WIDTH, OUT_W, Job, MediaInfo, VideoMakerError
                    ensure_mp4, find_tool, format_time, is_packaged, probe, render,
                    sort_headcam_files)
 from .filedialogs import ask_open, ask_save
-from .fitfile import HeartRate, load_fit
+from .fitfile import HeartRate, Terrain, load_fit, pace_text
 from .frames import Timeline, grab_frame, mjpeg_command
 from .placing_video import PlacingTrack, svg_at
 from .pulse_video import PulseTrack
+from .terrain_video import TerrainTrack
 from . import splits as splitmod
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
@@ -242,7 +243,8 @@ class State:
         self.hr: Optional[HeartRate] = None
         self.hr_id = 0
         self.fit_start: Optional[float] = None
-        # Fältet under videon räcker till en sak: "none", "pulse" eller "placing".
+        self._tinfo: Optional[tuple] = None   # (hr_id, fakta om höjd och fart)
+        # Fältet under videon räcker till en sak: "none", "pulse", "terrain" eller "placing".
         self.under = "none"
         # Placeringen: inklistrade sträcktider (bara i minnet), vem du är och vilka som syns.
         self.splits_text = ""
@@ -288,7 +290,8 @@ class State:
             if hr is not None:
                 hr_info = {"id": self.hr_id, "name": hr.name, "start": hr.start, "end": hr.end,
                            "duration": hr.duration, "min": min(hr.bpm), "max": max(hr.bpm),
-                           "minutes": max(1, round(hr.duration / 60))}
+                           "minutes": max(1, round(hr.duration / 60)),
+                           "terrain": self._terrain_info()}
             return {
                 "version": __version__,
                 "toolsError": self.tools_error,
@@ -300,6 +303,7 @@ class State:
                 "hr": hr_info, "fitStart": self.fit_start,
                 "pulse": self.pulse_track() is not None,
                 "under": self.under, "placingOn": self.placing_track() is not None,
+                "terrainOn": self.terrain_track() is not None,
                 "placing": self.placing_info(),
                 "videoLength": self.video_length(), "leadIn": LEAD_IN,
                 "previewSeconds": PREVIEW_SECONDS,
@@ -323,6 +327,20 @@ class State:
         end = self.end_time if self.end_time is not None else self.hc_tl.duration
         return PulseTrack(self.hr, offset=self.fit_start - self.hc_sync,
                           graph_start=max(0.0, self.hc_sync - LEAD_IN), graph_end=end)
+
+    def _terrain_info(self) -> Optional[Dict[str, Any]]:
+        """Räknas en gång per fil (läget hämtas många gånger i sekunden)."""
+        if self._tinfo is None or self._tinfo[0] != self.hr_id:
+            self._tinfo = (self.hr_id, _terrain_info(self.hr.terrain if self.hr else None))
+        return self._tinfo[1]
+
+    def terrain_track(self) -> Optional[TerrainTrack]:
+        if self.under != "terrain" or self.hr is None or self.hr.terrain is None \
+                or self.fit_start is None or self.hc_sync is None or not self.hc_tl:
+            return None
+        end = self.end_time if self.end_time is not None else self.hc_tl.duration
+        return TerrainTrack(self.hr, offset=self.fit_start - self.hc_sync,
+                            graph_start=max(0.0, self.hc_sync - LEAD_IN), graph_end=end)
 
     # --- placeringen ---
     def _index(self, name: Optional[str]) -> Optional[int]:
@@ -371,7 +389,7 @@ class State:
                    headcam_sync=self.hc_sync or 0.0, livelox_sync=self.ll_sync or 0.0,
                    lead_in=LEAD_IN, end_time=self.end_time, livelox_width=self.livelox_width,
                    headcam_flip=self.hc_flip, pulse=self.pulse_track(),
-                   placing=self.placing_track())
+                   placing=self.placing_track(), terrain=self.terrain_track())
 
     # --- åtgärder från sidan ---
     def check_tools(self) -> None:
@@ -480,7 +498,10 @@ class State:
                     self.hr = hr
                     self.hr_id += 1
                     self.fit_start = None
-                    self.under = "pulse"   # en ny pulsfil: visa pulsen under videon
+                    # En ny fil från klockan: visa pulsen under videon, eller höjd och fart om
+                    # det var valt och filen har dem.
+                    if not (self.under == "terrain" and hr.terrain is not None):
+                        self.under = "pulse"
         threading.Thread(target=work, daemon=True).start()
         return {}
 
@@ -493,7 +514,7 @@ class State:
 
     def set_under(self, body) -> Dict[str, Any]:
         what = (body or {}).get("what")
-        if what in ("none", "pulse", "placing"):
+        if what in ("none", "pulse", "terrain", "placing"):
             with self.lock:
                 self.under = what
         return {}
@@ -792,12 +813,14 @@ class State:
     def _speed_key(self, scale: int) -> Optional[str]:
         """Vilken sorts film det är, för minnet av datorns hastighet. Start, målgång,
         vändning och kartans bredd påverkar knappt hastigheten och ingår inte. Bandet under
-        videon (puls eller placeringslinje) ingår, men inga namn eller sträcktider."""
+        videon (puls, höjd och fart eller placeringslinje) ingår, men inga namn eller
+        sträcktider."""
         if not self.hc_infos or self.ll_info is None:
             return None
         return speedcache.profile(self.hc_infos[0], self.ll_info,
                                   self.pulse_track() is not None, scale,
-                                  extra="placering" if self.placing_track() is not None else "")
+                                  extra="placering" if self.placing_track() is not None
+                                  else "hojd" if self.terrain_track() is not None else "")
 
     def estimate(self, scale: int) -> Optional[float]:
         speed = self.speeds.get(scale)
@@ -882,6 +905,39 @@ class State:
             return {"id": self.hr_id, "start": hr.start, "step": step,
                     "values": [None if v is None else round(v, 1) for v in vals],
                     "suggestion": hr.suggest_start()}
+
+    def terrain_series(self) -> Dict[str, Any]:
+        """Höjd och fart för förhandsbilden i steg 4 (högst ca 1500 punkter)."""
+        with self.lock:
+            hr = self.hr
+            if hr is None or hr.terrain is None:
+                return {}
+            ter = hr.terrain
+            step = max(1.0, (ter.times[-1] - ter.times[0]) / 1500)
+            n = int((ter.times[-1] - ter.times[0]) / step) + 1
+            vals = [ter.at(ter.times[0] + i * step) for i in range(n)]
+            return {"id": self.hr_id, "start": ter.times[0], "step": step,
+                    "alt": [None if v is None else round(v[0], 1) for v in vals],
+                    "speed": [None if v is None else round(v[1], 3) for v in vals]}
+
+
+def _terrain_info(ter: Optional[Terrain]) -> Optional[Dict[str, Any]]:
+    """Fakta om höjd och fart till steg 1, med en liten profil (färg efter fart)."""
+    if ter is None:
+        return None
+    from .terrain_video import speed_color
+    win = ter.window(ter.times[0], ter.times[-1])
+    if win is None:
+        return None
+    a_lo, a_hi, s_lo, s_hi = win
+    n = 120
+    prof = []
+    for i in range(n):
+        v = ter.at(ter.times[0] + (ter.times[-1] - ter.times[0]) * i / (n - 1))
+        prof.append(None if v is None else
+                    [round(v[0], 1), "#%02x%02x%02x" % speed_color(v[1], s_lo, s_hi)])
+    return {"altMin": round(a_lo), "altMax": round(a_hi), "slow": pace_text(s_lo),
+            "fast": pace_text(s_hi), "profile": prof}
 
 
 def fmt_estimate(seconds: Optional[float]) -> str:
@@ -974,6 +1030,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(self.server.state.snapshot())
         if u.path == "/api/pulse":
             return self._json(self.server.state.pulse_series())
+        if u.path == "/api/terrain":
+            return self._json(self.server.state.terrain_series())
         if u.path == "/api/placing_svg":
             try:
                 t = float(q.get("t", ["0"])[0])
@@ -1204,6 +1262,7 @@ def selftest() -> str:
     check_tools()
     lines.append("ffmpeg och ffprobe startar")
     lines.append(_pulse_selftest())
+    lines.append(_terrain_selftest())
     lines.append(_placing_selftest())
     lines.append(f"Guide: {_guide_path()}")
     return "\n".join(lines)
@@ -1230,6 +1289,30 @@ def _pulse_selftest() -> str:
         out = os.path.join(folder, "puls.mp4")
         render(Job([clips[0]], clips[1], out, lead_in=0, pulse=PulseTrack(hr, offset=t0)))
         return f"Pulsvideo: {os.path.getsize(out)} byte"
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _terrain_selftest() -> str:
+    """Gör en kort video med höjd och fart (löparens bildsekvens, färgskalan, sendcmd)."""
+    folder = tempfile.mkdtemp(prefix="olvm_selftest_")
+    try:
+        ffmpeg = find_tool("ffmpeg")
+        clips = []
+        for name, color in (("hc.mp4", "red"), ("ll.mp4", "blue")):
+            path = os.path.join(folder, name)
+            subprocess.run([ffmpeg, "-v", "error", "-y", "-f", "lavfi", "-i",
+                            f"color=c={color}:s=640x360:d=3", "-pix_fmt", "yuv420p", path],
+                           check=True, capture_output=True,
+                           creationflags=CREATE_NO_WINDOW if os.name == "nt" else 0)
+            clips.append(path)
+        t0 = 1795888000.0
+        times = [t0 + s for s in range(20)]
+        ter = Terrain(times, [30 + 2 * s for s in range(20)], [2.0 + 0.15 * s for s in range(20)])
+        hr = HeartRate(times, [150] * 20, "test.fit", ter)
+        out = os.path.join(folder, "hojd.mp4")
+        render(Job([clips[0]], clips[1], out, lead_in=0, terrain=TerrainTrack(hr, offset=t0)))
+        return f"Höjd- och fartvideo: {os.path.getsize(out)} byte"
     finally:
         shutil.rmtree(folder, ignore_errors=True)
 
