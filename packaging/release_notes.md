@@ -1,3 +1,14 @@
+## Nyheter i den här versionen
+
+1. **Placering under loppet:** klistra in sträcktiderna från Livelox, så visar videon hur din
+   placering ändras från kontroll till kontroll.
+2. **Garmin-instruktionen** visar rätt menyval: **Export File**.
+3. **Livelox-instruktionen** visar alla nio stegen i en lista som du rullar i.
+4. **Snabbare steg 5:** programmet minns hur snabb datorn är, så tidsuppskattningen
+   behöver inte provkoda varje gång.
+5. **Tydligare steg:** siffran vid ett kort eller en knapp blir en grön bock när den delen
+   är klar, och reglagen i steg 2, 3 och 4 sitter direkt under filmbilden.
+
 ## Så kommer du igång
 
 Utförlig hjälp: [installationsguiden](https://github.com/hoa79/ol_video_maker/blob/main/docs/INSTALLERA.md).
