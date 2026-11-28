@@ -43,7 +43,7 @@ Programmets villkor finns i [VILLKOR.md](docs/VILLKOR.md).
 **Släpp en version till kompisar:**
 
 1. Öppna repot på GitHub och klicka på **Releases** och sedan **Draft a new release**.
-2. Skriv en ny tagg, till exempel `v0.2.0`, välj **Create new tag** och klicka på **Publish release**.
+2. Skriv en ny tagg, till exempel `v0.4.0-beta`, välj **Create new tag** och klicka på **Publish release**.
    (Eller skapa och pusha taggen med git.)
 3. GitHub bygger paketet och lägger zip-filen och ffmpegs källkod i releasen. Det tar några
    minuter. Tills dess finns bara källkodsfilerna som GitHub alltid lägger till.
@@ -71,7 +71,7 @@ Pulsfilen från klockan (.fit) läses av en egen liten läsare i `ol_video_maker
 så inget extra bibliotek behövs. Sträcktiderna från Livelox tolkas i `ol_video_maker/splits.py`
 och placeringslinjen ritas i `ol_video_maker/placing_video.py` (ffmpegs ass-filter).
 - Bygga Windows-paketet för hand (på Windows): `pip install markdown==3.7` (med Python från python.org) och sedan
-  `python packaging/build_windows.py --version 0.2.0`. Paketet hamnar i `build_win/`.
+  `python packaging/build_windows.py --version 0.4.0-beta`. Paketet hamnar i `build_win/`.
 
 ## Licens
 
