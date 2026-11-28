@@ -147,6 +147,7 @@ Programmet installerar ingenting i Windows. För att ta bort det:
 2. Ta bort genvägen på skrivbordet om du gjorde en.
 3. Vill du ta bort allt? Tryck på **Windows-tangenten + R**, skriv `%LOCALAPPDATA%` och tryck
    **Enter**. Ta bort mappen **OL Video Maker** där. Den innehåller bara fönstrets
-   inställningar, att du har godkänt villkoren och hur snabbt datorn gör video.
+   inställningar, att du har godkänt villkoren, ditt namn om du sparat det och hur snabbt
+   datorn gör video.
 
 Dina egna filmer och videor tas inte bort.

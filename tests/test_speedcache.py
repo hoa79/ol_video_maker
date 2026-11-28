@@ -39,10 +39,11 @@ class SpeedCacheTest(DataDirTest):
         speedcache.put(key, 1.0, source="video")  # riktig video väger tyngst
         self.assertAlmostEqual(speedcache.get(key), 0.85)
 
-    def test_key_depends_on_format_pulse_and_scale(self):
+    def test_key_depends_on_format_band_and_scale(self):
         keys = {speedcache.profile(HC, LL, False, 1), speedcache.profile(HC, LL, False, 2),
-                speedcache.profile(HC, LL, True, 1), speedcache.profile(LL, LL, False, 1)}
-        self.assertEqual(len(keys), 4)
+                speedcache.profile(HC, LL, True, 1), speedcache.profile(LL, LL, False, 1),
+                speedcache.profile(HC, LL, False, 1, extra="placering")}
+        self.assertEqual(len(keys), 5)
 
     def test_no_file_names_saved(self):
         speedcache.put(speedcache.profile(HC, LL, True, 1), 2.0)

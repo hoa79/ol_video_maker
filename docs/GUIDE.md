@@ -131,8 +131,12 @@ Du kan alltid klicka på **Tillbaka** och ändra.
       filer, håll ner **Ctrl** och klicka på alla.
    2. Klicka på **Välj Livelox-inspelning…** och välj filen du spelade in (Del B).
       Har du inte spelat in än? Klicka på länken **Hur spelar jag in Livelox?** i programmet.
-   3. Vill du visa din puls i videon (frivilligt)? Klicka på **Välj pulsfil…** och välj filen
-      från klockan (se **Hämta pulsfilen från Garmin** nedan). Du kan välja zip-filen direkt.
+   3. **Under videon (frivilligt):** Fältet under headcam-bilden räcker till en sak. Välj
+      **Ingenting**, **Puls** eller **Placering**.
+      - **Puls:** Klicka på **Välj pulsfil…** och välj filen från klockan (se **Hämta
+        pulsfilen från Garmin** nedan). Du kan välja zip-filen direkt.
+      - **Placering:** Du klistrar in sträcktiderna från Livelox på nästa sida (se
+        **Visa placeringen under loppet** nedan).
    4. Klicka på **Nästa**.
 4. **Steg 2, Synka starten:** Nu ser du båda filmerna bredvid varandra.
    1. Är headcam-bilden upp och ner? Kryssa i **Vänd bilden**. Bilden vänds
@@ -180,17 +184,47 @@ Du kan alltid klicka på **Tillbaka** och ändra.
    Med pulsfil visas hela loppets pulskurva i det svarta fältet under headcam-bilden. Den stora
    siffran till vänster är pulsen just då, och det röda hjärtat på kurvan slår i samma takt
    som ditt hjärta.
-8. Ladda upp videon på YouTube. Programmet skriver **Karta: Livelox** längst ner i kartkolumnen.
+   Med placering visas en linje från start till mål med kontrollerna. Du och de du valde är
+   prickar på linjen, där ni var vid samma lopptid. Siffran vid namnet är placeringen vid
+   senaste kontrollen. En grön springande figur vinner minst 3 placeringar på sträckan, en
+   orange trött figur tappar minst 3.
+8. Ladda upp videon på YouTube. Programmet skriver **Karta: Livelox** längst ner i kartkolumnen
+   (**Karta och sträcktider: Livelox** när placeringen visas).
    Skriv också i beskrivningen var kartan kommer från, till exempel:
    *Karta och GPS-spår: Livelox (livelox.com). Tävling: [namn], arrangör: [klubb].*
 9. Om din YouTube-kanal tjänar pengar, fråga Livelox först. Ange gärna också tävlingen och
    arrangören, som äger kartan.
 
+### Visa placeringen under loppet
+
+1. Välj **Placering** under **Under videon** i steg 1 och klicka på **Nästa**.
+2. Öppna loppet i Livelox, välj din klass och öppna sträcktiderna (**Split times**).
+3. Markera hela tabellen med musen, från rubriken **Pl** till sista raden, och kopiera med
+   **Ctrl + C**.
+4. **1 Klistra in sträcktiderna:** Klicka i rutan i programmet och klistra in med **Ctrl + V**.
+   Programmet skriver hur många löpare och kontroller det hittade.
+5. **2 Vem är du?** Välj ditt namn i listan. Programmet minns namnet till nästa gång (klicka på
+   **Glöm mitt namn** för att ta bort det). Är du inte med, eller vill du ha mer plats för
+   linjen? Välj **Ingen, visa bara linjen**. Då visas ingen stor placeringssiffra.
+6. **3 Välj vilka som syns:** Kryssa i upp till 8 löpare (du räknas med). Snabbknapparna
+   **Topp 5 + du**, **Närmast dig** och **Din klubb** fyller i listan åt dig. Kolumnen längst
+   till höger visar hur namnet skrivs i videon, till exempel **Anna B.**
+7. Kryssa i **De jag visar med namn vet om det och tycker att det är okej** bara om du har
+   frågat dem. Annars visas de andra bara med placering, utan namn.
+8. Klicka på **Nästa** och fortsätt med steg 2.
+
+Felstämplade löpare skrivs aldrig ut som felstämplade i videon. Pricken tonas bara bort vid
+kontrollen som saknas. Löpare som inte startade går inte att välja. Sträcktiderna sparas bara
+i programmet på din dator och skickas aldrig någonstans.
+
+Andra löpares namn och placeringar är personuppgifter. Fråga dem du visar med namn innan du
+lägger ut videon, och var extra försiktig med barn och ungdomar (se villkoren, punkt 3).
+
 ### Hämta pulsfilen från Garmin
 
 1. Gå till **connect.garmin.com** i webbläsaren och logga in.
 2. Öppna aktiviteten för ditt lopp.
-3. Klicka på **kugghjulet** uppe till höger och välj **Exportera original**.
+3. Klicka på **kugghjulet** uppe till höger och välj **Export File**.
 4. Du får en zip-fil. Välj den direkt i programmet (eller packa upp .fit-filen först).
 
 Utan internet: anslut klockan till datorn med USB-kabeln. Filerna ligger i mappen

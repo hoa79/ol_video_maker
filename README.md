@@ -32,7 +32,8 @@ Programmets villkor finns i [VILLKOR.md](docs/VILLKOR.md).
 2. Spela in Livelox-uppspelningen av ditt lopp på skärmen (guiden, del B).
 3. Följ de fem stegen i programmet: välj filmer, synka starten, välj slutet, titta på en provbit
    och skapa videon.
-   Vill du visa pulsen från din Garmin-klocka? Välj .fit-filen i steg 1 (frivilligt).
+   Vill du visa pulsen från din Garmin-klocka eller din placering under loppet? Välj det under
+   **Under videon** i steg 1 (frivilligt).
 
 ## Dela programmet med kompisar
 
@@ -67,7 +68,8 @@ visar i ett eget appfönster i Microsoft Edge, som redan finns i Windows 10 och 
 eller vanlig webbläsare). Filväljarna är Windows egna rutor via tkinter.
 Provkör sidan utan fönster: `OLVM_NO_WINDOW=1 python -m ol_video_maker` skriver adressen.
 Pulsfilen från klockan (.fit) läses av en egen liten läsare i `ol_video_maker/fitfile.py`,
-så inget extra bibliotek behövs.
+så inget extra bibliotek behövs. Sträcktiderna från Livelox tolkas i `ol_video_maker/splits.py`
+och placeringslinjen ritas i `ol_video_maker/placing_video.py` (ffmpegs ass-filter).
 - Bygga Windows-paketet för hand (på Windows): `pip install markdown==3.7` (med Python från python.org) och sedan
   `python packaging/build_windows.py --version 0.2.0`. Paketet hamnar i `build_win/`.
 
