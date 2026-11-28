@@ -107,7 +107,7 @@ class FitReading(unittest.TestCase):
         write_fit(empty, [])
         with self.assertRaises(VideoMakerError) as cm:
             load_fit(empty)
-        self.assertIn("ingen puls", str(cm.exception))
+        self.assertIn("varken puls eller GPS", str(cm.exception))
 
     def test_gap_breaks_curve(self):
         hr = HeartRate([T0, T0 + 1, T0 + 200, T0 + 201], [100, 100, 150, 150])

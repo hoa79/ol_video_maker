@@ -133,9 +133,10 @@ Du kan alltid klicka på **Tillbaka** och ändra.
       Har du inte spelat in än? Klicka på länken **Hur spelar jag in Livelox?** i programmet.
    3. **Under videon (frivilligt):** Fältet under headcam-bilden räcker till en sak. Välj
       **Ingenting**, **Puls**, **Höjd och fart** eller **Placering**.
-      - **Puls:** Klicka på **Välj pulsfil…** och välj filen från klockan (se **Hämta
-        pulsfilen från Garmin** nedan). Du kan välja zip-filen direkt.
-      - **Höjd och fart:** Välj samma fil från klockan som för pulsen. Videon visar
+      - **Puls:** Klicka på **Välj fil från klockan…** och välj filen (se **Hämta
+        filen från Garmin** nedan). Du kan välja zip-filen direkt.
+      - **Höjd och fart:** Klicka på **Välj fil från klockan…** och välj samma sorts fil
+        som för pulsen. Den behöver inte ha puls. Videon visar
         höjdkurvan, färgad efter farten: blå när det går långsamt, röd när det går snabbt.
         En liten löpare springer längs kurvan, fortare ju snabbare du springer. Klockan
         behöver ha haft GPS på under loppet.
@@ -154,14 +155,16 @@ Du kan alltid klicka på **Tillbaka** och ändra.
    5. Gör samma sak i Livelox-bilden: leta upp ögonblicket när din prick börjar röra sig och
       klicka på **Starten är här**.
    6. Klicka på **Nästa**.
-   7. **Synka pulsen** (bara om du valde **Puls** eller **Höjd och fart**): Klockan vet inte var filmen börjar, så
-      du visar programmet var loppet startar i pulsen.
-      1. Programmet har redan flyttat den lila linjen dit pulsen börjar stiga brant. Till
-         höger ser du headcam-bilden från starten du markerade.
-      2. Flytta linjen om det behövs: dra i pulskurvan eller använd knapparna
+   7. **Synka pulsen** eller **Synka farten** (bara om du valde **Puls** eller **Höjd och
+      fart**): Klockan vet inte var filmen börjar, så du visar programmet var loppet startar.
+      Valde du **Puls** ser du pulsen. Valde du **Höjd och fart** ser du farten, färgad som i
+      videon.
+      1. Programmet har redan flyttat den lila linjen dit pulsen börjar stiga brant (eller
+         dit farten ökar tydligt). Till höger ser du headcam-bilden från starten du markerade.
+      2. Flytta linjen om det behövs: dra i kurvan eller använd knapparna
          **1 min**, **10 s** och **1 s**.
       3. Klicka på **Starten är här**. Knappen blir grön med en bock.
-      4. Klicka på **Nästa**. Det gör inget om det skiljer några sekunder. Du ser pulsen i
+      4. Klicka på **Nästa**. Det gör inget om det skiljer några sekunder. Du ser resultatet i
          provvideon i steg 4.
 5. **Steg 3, Välj målgång (frivilligt):** Dra reglaget till målgången och klicka på
    **Målgång är här**. Vill du ha med allt, klicka bara på **Nästa**. (Har du redan valt ett
@@ -233,7 +236,7 @@ i programmet på din dator och skickas aldrig någonstans.
 Andra löpares namn och placeringar är personuppgifter. Fråga dem du visar med namn innan du
 lägger ut videon, och var extra försiktig med barn och ungdomar (se villkoren, punkt 3).
 
-### Hämta pulsfilen från Garmin
+### Hämta filen från Garmin
 
 1. Gå till **connect.garmin.com** i webbläsaren och logga in.
 2. Öppna aktiviteten för ditt lopp.
@@ -243,9 +246,9 @@ lägger ut videon, och var extra försiktig med barn och ungdomar (se villkoren,
 Utan internet: anslut klockan till datorn med USB-kabeln. Filerna ligger i mappen
 **GARMIN\Activity** på klockan. Den senaste filen är ditt senaste pass.
 
-Pulsfilen läses bara på din dator. Den skickas aldrig någonstans. Men tänk på att pulsen syns
-för alla som tittar på videon när du lägger upp den på YouTube. Vill du inte det, hoppa över
-pulsfilen.
+Filen från klockan läses bara på din dator. Den skickas aldrig någonstans. Men tänk på att
+pulsen syns för alla som tittar på videon när du lägger upp den på YouTube. Vill du inte det,
+välj inte **Puls**.
 
 > Stänger du programmet medan en video skapas, frågar det om du vill avbryta. Den halvfärdiga
 > filen tas då bort.
