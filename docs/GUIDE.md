@@ -120,7 +120,8 @@ Gör först steg 1–3 ovan i Livelox.
 
 ## Del C: Gör videon
 
-Programmet leder dig genom fem steg. Till vänster i fönstret ser du alltid vilket steg du är på.
+Programmet leder dig genom fem steg, och ett sjätte frivilligt steg för en kort video till
+mobilen. Till vänster i fönstret ser du alltid vilket steg du är på.
 Du kan alltid klicka på **Tillbaka** och ändra.
 
 1. Kopiera filerna från din GoPro till datorn. Ett långt lopp kan vara uppdelat i flera filer
@@ -207,6 +208,30 @@ Du kan alltid klicka på **Tillbaka** och ändra.
    *Karta och GPS-spår: Livelox (livelox.com). Tävling: [namn], arrangör: [klubb].*
 9. Om din YouTube-kanal tjänar pengar, fråga Livelox först. Ange gärna också tävlingen och
    arrangören, som äger kartan.
+
+### Kort video för mobilen (frivilligt)
+
+Steg 6 gör en kort video på högst 1 minut i stående format (9:16) för TikTok, Instagram och
+Reels. Headcam-bilden ligger överst och kartan under, så kartan täcker aldrig filmen. Du kan
+göra den före eller efter den vanliga videon.
+
+1. Klicka på **Nästa** i steg 5, eller på **Kort video** till vänster.
+2. Programmet har redan föreslagit några bitar: starten, några ställen i loppet och
+   målgången. Har du klistrat in sträcktider och valt dig själv (se **Visa placeringen under
+   loppet**) är bitarna de kontroller där du tappade mest och där du var snabbast.
+   Bitarna syns som lila streck under reglaget och i listan **Dina bitar**.
+3. Dra reglaget till något du vill ha med och klicka på **Ta med den här biten**. Biten blir
+   8 sekunder lång och börjar 3 sekunder före det du pekade på.
+4. Klicka på **▶ Titta** för att se en bit, eller **✕** för att ta bort den. Den lilla
+   telefonen till höger visar hur videon blir. Ångrar du dig, klicka på **Börja om med
+   förslaget**.
+5. Överst i listan står hur lång videon blir, högst 60 sekunder. Är den full, ta bort en bit
+   innan du lägger till en ny.
+6. Klicka på **Skapa kort video**. Den sparas bredvid den vanliga videon och heter som den,
+   med **_kort** på slutet (till exempel `OL-video_kort.mp4`). Det tar oftast en eller några
+   minuter.
+7. Klicka på **Titta** eller **Öppna mappen**. Skicka filen till mobilen och ladda upp den.
+   Skriv även här i beskrivningen var kartan kommer från.
 
 ### Visa placeringen under loppet
 

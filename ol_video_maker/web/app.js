@@ -1363,11 +1363,122 @@ const CreatePage = {
     for (const n of [this.n1, this.n2, this.n3]) setDone(n, finished);
     this.panel.update();
   },
-  hint() { return S.render.kind === "make" && S.render.ok === true ? "Videon är klar! Titta på den, eller ladda upp den på YouTube." : null; },
+  hint() { return S.render.kind === "make" && S.render.ok === true ? "Videon är klar! Vill du också göra en kort video för mobilen? Tryck på <b>Nästa</b>." : null; },
 };
 
-const PAGES = [FilesPage, PlacingPage, SyncPage, PulsePage, EndPage, PreviewPage, CreatePage];
-const NAMES = ["Välj filmer", "🏃 Placering", "Synka starten", "♥ Synka pulsen", "Välj målgång", "Titta på provbit", "Skapa videon"];
+// --- 6. Kort video för mobilen (frivilligt, förslag B från UX-designern) ---
+// Användaren bläddrar i loppet och väljer bitar. Ett förval (start, kontroller, målgång)
+// görs när steget visas första gången. Bitarna blir en stående video (9:16) på högst 1 minut.
+const ShortPage = {
+  number: 6, kicker: "Steg 6", title: "Kort video för mobilen", optional: true, nextStep: 0,
+  lead: "Ca 1 minut i stående format för TikTok, Instagram och Reels. Vi har föreslagit några bitar, ändra som du vill.",
+  tip: "Lägg till eller ta bort bitar. Tryck sedan på <b>Skapa kort video</b>.",
+  ready: () => null,
+  build(root) {
+    this.v = new Viewer({src: "hc", step: 1, title: "🎥 Titta igenom loppet och välj bitar", icon: "＋",
+      markText: "Ta med den här biten", markedText: "", onMark: (t) => api("short_add", {t})});
+    const seek = this.v.seek.bind(this.v);
+    this.v.seek = (t, fromRange) => { seek(t, fromRange); this.drawPhone(); this.drawTimeline(); };
+    // Tidslinje med bitarna (klicka på en bit för att hoppa dit).
+    this.tl = h("div", {class: "cliptl", title: "Dina bitar. Klicka för att titta på en bit."});
+    this.v.range.after(this.tl);
+    this.v.status.remove();
+    // Höger: dina bitar och hur den korta videon blir.
+    this.meter = h("small");
+    this.list = h("div", {class: "cliplist"});
+    this.reset = h("a", {href: "#", class: "textlink", onclick: (e) => { e.preventDefault(); api("short_reset"); }}, "Börja om med förslaget");
+    this.hcImg = h("img", {alt: ""}); this.llImg = h("img", {alt: ""});
+    this.lbl = h("span", {class: "plbl"});
+    this.bar = h("i");
+    this.phone = h("div", {class: "phone"}, h("div", {class: "ptop"}, this.lbl),
+      h("div", {class: "phc"}, this.hcImg), h("div", {class: "pll"}, this.llImg, h("span", {class: "pcred"}, "Karta: Livelox")),
+      h("div", {class: "pbot"}, h("div", {class: "pbar"}, this.bar)));
+    this.hcL = new FrameLoader(this.hcImg, "hc"); this.llL = new FrameLoader(this.llImg, "ll");
+    this.makeBtn = h("button", {class: "big", onclick: () => api("make_short")}, "🎬 Skapa kort video");
+    this.where = h("div", {class: "small"});
+    this.panel = renderPanel("short");
+    this.done = h("div", {class: "donebtns"},
+      h("button", {class: "big", onclick: () => api("open_output")}, "▶ Titta"),
+      h("button", {class: "big second", onclick: () => api("open_output", {folder: true})}, "Öppna mappen"));
+    root.append(h("div", {class: "row grow fit"}, this.v.el, h("div", {class: "panel shortpanel"},
+      h("div", {class: "box clipbox"}, h("h3", {}, this.n2 = num(2), "Dina bitar", this.meter), this.list, this.reset),
+      h("div", {class: "box"}, h("h3", {}, this.n3 = num(3), "Så blir den"),
+        h("div", {class: "makebox"}, this.phone, h("div", {class: "makeright"}, this.makeBtn, this.where)),
+        this.panel.el, this.done))));
+    this.shown = null; this.listKey = null;
+  },
+  show() { api("short_show"); },
+  // Var i den korta videon är vi just nu (bitens nummer), annars null.
+  clipAt(t) { return (S.short.clips || []).findIndex((c) => t >= c.start && t < c.start + c.length); },
+  drawPhone() {
+    if (!S || !S.hc || !this.phone.isConnected) return;
+    const t = this.v.t, d = window.devicePixelRatio || 1;
+    const r1 = this.hcImg.parentElement.getBoundingClientRect(), r2 = this.llImg.parentElement.getBoundingClientRect();
+    this.hcL.request(t, Math.max(32, r1.width * d), Math.max(18, r1.height * d));
+    const lt = t - S.hcSync + S.llSync;
+    this.llImg.style.visibility = lt < 0 ? "hidden" : "";
+    if (lt >= 0 && S.ll) this.llL.request(Math.min(lt, S.ll.duration - 0.1), Math.max(32, r2.width * d), Math.max(18, r2.height * d));
+    const cl = S.short.clips, i = this.clipAt(t);
+    this.lbl.textContent = i >= 0 ? cl[i].label : "Inte med";
+    this.lbl.className = "plbl" + (i >= 0 ? "" : " off");
+    let before = 0;
+    for (let j = 0; j < cl.length && (i < 0 || j < i); j++) if (cl[j].start + cl[j].length <= t) before += cl[j].length;
+    if (i >= 0) before += t - cl[i].start;
+    this.bar.style.width = `${S.short.total ? Math.min(100, 100 * before / S.short.total) : 0}%`;
+  },
+  drawTimeline() {
+    if (!S || !S.hc) return;
+    const dur = S.hc.duration, cl = S.short.clips;
+    this.tl.innerHTML = "";
+    cl.forEach((c, i) => this.tl.append(h("span", {class: "clip" + (this.clipAt(this.v.t) === i ? " on" : ""),
+      style: `left:${100 * c.start / dur}%;width:max(6px,${100 * c.length / dur}%)`, title: c.label,
+      onclick: () => this.v.seek(c.start + 0.1)})));
+    this.tl.append(h("span", {class: "cur", style: `left:${100 * this.v.t / dur}%`}));
+  },
+  update() {
+    const sh = S.short, cl = sh.clips;
+    const key = `${S.hc?.names}|${S.flip}`;
+    if (this.shown !== key) {
+      this.shown = key;
+      this.v.setInfo(S.hc, cl.length ? cl[0].start + 0.1 : (S.hcSync || 0));
+    }
+    this.v.setMarked(null);
+    const full = sh.total > sh.max - 2 || cl.length >= sh.maxClips;
+    this.v.markBtn.disabled = S.running;
+    this.v.markBtn.title = full ? "Den korta videon är full. Ta bort en bit först." : "";
+    const secs = Math.round(sh.total);
+    this.meter.innerHTML = `<b>${secs} s</b> av högst ${sh.max} s`;
+    this.meter.className = "meter" + (secs > sh.max ? " over" : "");
+    const lkey = JSON.stringify(cl) + S.running;
+    if (this.listKey !== lkey) {
+      this.listKey = lkey;
+      this.list.innerHTML = "";
+      if (!cl.length) this.list.append(h("p", {class: "small"}, "Inga bitar än. Bläddra i filmen och tryck på Ta med den här biten."));
+      cl.forEach((c, i) => this.list.append(h("div", {class: "cl"},
+        h("span", {class: "t"}, c.name === "Start" ? "0:00" : fmtRace(Math.max(0, Math.round(c.race + c.length / 2)))),
+        h("span", {class: "n"}, c.name || "Bit ur loppet"),
+        h("button", {class: "x", title: "Titta på biten", onclick: () => this.v.seek(c.start + 0.1)}, "▶ Titta"),
+        h("button", {class: "x", title: "Ta bort biten", disabled: S.running, onclick: () => api("short_remove", {i})}, "✕"))));
+      this.drawTimeline();
+      this.drawPhone();
+    }
+    this.reset.hidden = S.running;
+    setDone(this.n2, cl.length > 0);
+    this.makeBtn.disabled = S.running || !cl.length;
+    const finished = S.render.kind === "short" && S.render.ok === true && !S.running;
+    this.makeBtn.className = finished ? "big second" : "big";
+    setDone(this.n3, finished);
+    const est = sh.estimate;
+    this.where.innerHTML = `Sparas som <b>${esc(sh.output.split(/[\\/]/).pop() || "")}</b>` +
+      (est ? `<br>Tar ${fmtEstimate(est)}` : "");
+    this.done.hidden = !finished;
+    this.panel.update();
+  },
+  hint() { return S.render.kind === "short" && S.render.ok === true ? "Den korta videon är klar! Skicka den till mobilen och ladda upp den." : null; },
+};
+
+const PAGES = [FilesPage, PlacingPage, SyncPage, PulsePage, EndPage, PreviewPage, CreatePage, ShortPage];
+const NAMES = ["Välj filmer", "🏃 Placering", "Synka starten", "♥ Synka pulsen", "Välj målgång", "Titta på provbit", "Skapa videon", "Kort video"];
 const isActive = (i) => !PAGES[i].active || PAGES[i].active();
 
 // ---------------------------------------------------------------------------
