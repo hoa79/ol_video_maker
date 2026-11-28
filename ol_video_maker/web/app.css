@@ -239,23 +239,24 @@ footer{display:flex;align-items:center;gap:14px;padding-top:14px;margin-top:14px
 .m-btns{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
 .m-btns .big{width:auto;margin:0;font-size:14.5px;padding:9px 22px}
 
-/* Livelox-instruktionen: ett steg i taget */
-.dialog.llguide{width:min(780px,94vw);max-height:94vh;overflow-y:auto}
-.llkick{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--primary);font-weight:700;margin-top:-2px}
-.llstage{display:flex;gap:22px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;height:min(340px,max(240px,calc(94vh - 230px)));margin-top:10px;overflow-y:auto}
-.lltext{flex:1;font-size:16px;line-height:1.55}
-.llstage.nopic .lltext{max-width:540px;margin:0 auto;font-size:17px}
-.lltext p{font-size:14px;margin:8px 0 0;white-space:normal}
+/* Livelox-instruktionen: alla steg i en lista man rullar i */
+.dialog.llguide{width:min(920px,94vw);max-height:92vh;display:flex;flex-direction:column;padding:22px 26px 18px}
+.llguide h2{font-size:21px}
+.llguide #m-body{display:flex;flex-direction:column;min-height:0}
+.dialog p.llintro{margin-bottom:0}
+.llscroll{overflow-y:auto;min-height:0;margin-top:8px;padding-right:6px;margin-right:-6px;outline:none}
+.llgrp{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--side);font-weight:700;margin:14px 0 8px;display:flex;align-items:center;gap:8px}
+.llgrp:first-child{margin-top:4px}
+.llgrp::after{content:"";flex:1;height:1px;background:var(--border)}
+.llstep{display:flex;gap:14px;align-items:flex-start;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px}
+.llnum{width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;flex:none}
+.lltext{flex:1;font-size:14px;line-height:1.5;padding-top:3px}
 .lltext b{color:var(--text)}
-.llnum{width:44px;height:44px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;font-weight:700;font-size:20px;margin-bottom:10px}
-.llpic{position:relative;flex:none;max-width:50%}
-.llpic img{display:block;max-width:100%;max-height:min(300px,max(200px,calc(94vh - 270px)));width:auto;height:auto;border-radius:6px;border:1px solid #333}
+.dialog .lltext p{font-size:13px;margin:3px 0 0;white-space:normal}
+.llpic{position:relative;flex:none;max-width:40%}
+.llpic img{display:block;max-width:100%;height:auto;border-radius:6px;border:1px solid #333}
 .llpic img[src$=".svg"]{border:0}
 .llpic .ring{position:absolute;border:2.5px solid #ff2fb0;border-radius:6px;box-shadow:0 0 0 2px rgba(255,255,255,.7)}
-.lldots{display:flex;gap:6px;justify-content:center;margin-top:12px}
-.lldots button{width:26px;height:26px;border-radius:50%;border:2px solid var(--ghostBorder);font-size:11.5px;font-weight:700;display:grid;place-items:center;color:var(--muted)}
-.lldots button.done{background:var(--sideText);border-color:var(--side);color:var(--side)}
-.lldots button.on{border-color:var(--primary);color:var(--primary)}
 .llguide .m-btns{align-items:center}
 .llsrc{margin-right:auto;font-size:11.5px;color:var(--muted)}
 .big:disabled{opacity:.45}
