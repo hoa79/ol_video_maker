@@ -28,7 +28,8 @@ import struct
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from .splits import MAX_SHOWN, TREND_LIMIT, Moment, Splits, moment, ordinal, short_names
+from .splits import (MAX_SHOWN, TREND_LIMIT, Moment, Splits, moment, ordinal, race_time,
+                     short_names)
 
 BAND_H = 180                 # samma fält som pulsbandet (Full HD-pixlar)
 STEP = 0.5                   # sekunder mellan uppdateringar i videon
@@ -53,6 +54,7 @@ class PlacingTrack:
     """Placeringar som ska visas i videon.
 
     race_start: tid i headcam-filmen när loppet startar (synkögonblicket i steg 2).
+    race_end: tid i headcam-filmen vid målgången (steg 3), eller None om den inte är markerad.
     shown: index (i splits.runners) för de löpare som syns. me: ditt index eller None.
     consent: kryssrutan "De jag visar med namn vet om det …".
     """
@@ -61,6 +63,21 @@ class PlacingTrack:
     me: Optional[int]
     consent: bool
     race_start: float = 0.0
+    race_end: Optional[float] = None
+
+    def finish(self) -> Optional[int]:
+        """Din sluttid enligt sträcktiderna (sekunder), eller None."""
+        sp = self.splits
+        if self.me is None or not (0 <= self.me < len(sp.runners)):
+            return None
+        r = sp.runners[self.me]
+        return r.splits[-1] if r.splits else None
+
+    def race_time(self, video_t: float) -> float:
+        """Lopptiden enligt Livelox vid tiden video_t i headcam-filmen. Är målgången markerad
+        i filmen står du i mål i linjen precis när du går i mål i filmen (se
+        splits.race_time)."""
+        return race_time(video_t, self.race_start, self.race_end, self.finish())
 
 
 # ---------------------------------------------------------------------------
@@ -289,13 +306,6 @@ def figure_frames(kind: str, k: int, folder: str) -> Tuple[str, int, int]:
 # ---------------------------------------------------------------------------
 
 
-def _clock(t: float) -> str:
-    t = int(max(0, t))
-    h, r = divmod(t, 3600)
-    m, s = divmod(r, 60)
-    return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
-
-
 class Scene:
     """Räknar ut vad som ska ritas. Kommer ihåg var etiketterna stod förra gången, så att de
     inte hoppar mellan raderna i onödan."""
@@ -374,11 +384,9 @@ class Scene:
                     items.append(Item("trend", 3, Text(
                         30, 1041, [(f"{'▲' if up else '▼'} {abs(m.trend)} på sträckan",
                                     GREEN if up else ORANGE, True)], 20, outline=0)))
-            items.append(Item("lopptid", 3, Text(30, 1065, [(f"lopptid {_clock(t)}", WHITE,
-                                                             False)], 15, outline=0, alpha=0.45)))
+            items += self.legend_items(30, 1065)
         else:
-            items.append(Item("lopptid", 3, Text(48, 923, [(f"lopptid {_clock(t)}", WHITE,
-                                                            False)], 17, outline=0, alpha=0.6)))
+            items += self.legend_items(30, 923)
         # Löparna: prickar i rader ovanför linjen, etiketter bredvid.
         boxes = []
         for i in self.shown:
@@ -413,6 +421,20 @@ class Scene:
                                                           align="l" if side > 0 else "r",
                                                           alpha=a)))
         return items
+
+    def legend_items(self, x: float, y: float) -> List[Item]:
+        """Teckenförklaringen för figurerna (där lopptiden stod förut). Figurerna står still
+        här och är mindre än på linjen."""
+        s = 0.5
+        out: List[Item] = []
+        for j, (kind, label) in enumerate((("fast", "snabb"), ("tired", "trött"))):
+            cx = x + 88 * j + FIG_R * s
+            for k_, sh in enumerate(place_shapes(figure_shapes(kind, 3), cx, y, s)):
+                out.append(Item(f"forkl_{kind}{k_}", 3, sh))
+            out.append(Item(f"forkl_{kind}_text", 3,
+                            Text(cx + FIG_R * s + 6, y, [(label, WHITE, False)], 15,
+                                 outline=0, alpha=0.75)))
+        return out
 
     def _rows(self, boxes) -> Dict[int, Tuple[int, int]]:
         """Lägg varje löpare i en rad och på en sida (1 höger, -1 vänster, 0 = ingen etikett)
@@ -573,7 +595,7 @@ def build_band(track: PlacingTrack, tmpdir: str, k: int, box_w: int, start: floa
     n = int(math.ceil(duration / STEP)) + 1
     for j in range(n):
         tau = min(duration, j * STEP)
-        race_t = start + tau - track.race_start
+        race_t = track.race_time(start + tau)
         seen = set()
         figs: Dict[str, Tuple[int, int]] = {}
         for it in scene.at(race_t):

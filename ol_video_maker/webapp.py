@@ -375,7 +375,8 @@ class State:
             return None
         if me is not None and not self.splits.runners[me].selectable:
             me = None
-        return PlacingTrack(self.splits, shown, me, self.consent, race_start=self.hc_sync)
+        return PlacingTrack(self.splits, shown, me, self.consent, race_start=self.hc_sync,
+                            race_end=self.end_time)
 
     def placing_info(self) -> Optional[Dict[str, Any]]:
         sp = self.splits
@@ -616,7 +617,7 @@ class State:
         if tr is None:
             return {"svg": ""}
         lw = max(LW_MIN, min(LW_MAX, lw))
-        return {"svg": svg_at(tr, OUT_W - lw, t - tr.race_start)}
+        return {"svg": svg_at(tr, OUT_W - lw, tr.race_time(t))}
 
     def mark(self, body) -> Dict[str, Any]:
         what, t = body["what"], body.get("t")

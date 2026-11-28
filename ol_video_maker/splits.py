@@ -246,6 +246,28 @@ def moment(sp: Splits, r: Runner, t: float) -> Moment:
 
 
 # ---------------------------------------------------------------------------
+# Filmens tid -> lopptid enligt Livelox
+# ---------------------------------------------------------------------------
+
+
+def race_time(video_t: float, race_start: float, race_end: Optional[float] = None,
+              finish: Optional[float] = None) -> float:
+    """Lopptiden enligt Livelox vid tiden video_t i headcam-filmen.
+
+    race_start: starten i filmen (synkögonblicket i steg 2). race_end: målgången i filmen
+    (steg 3) eller None. finish: din sluttid i sekunder från sträcktiderna eller None.
+
+    Alla tider som visas ska komma från sträcktiderna. Är både målgången och sluttiden kända
+    sträcks filmens tid mellan start och mål ut (linjärt) så att den blir precis sluttiden:
+    0 vid starten och sluttiden vid målgången i filmen. Annars räknas filmens tid från starten.
+    """
+    t = video_t - race_start
+    if race_end is not None and finish and race_end > race_start:
+        return t * finish / (race_end - race_start)
+    return t
+
+
+# ---------------------------------------------------------------------------
 # Urval
 # ---------------------------------------------------------------------------
 
