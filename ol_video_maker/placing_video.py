@@ -418,6 +418,7 @@ class Scene:
         """Lägg varje löpare i en rad och på en sida (1 höger, -1 vänster, 0 = ingen etikett)
         utan att etiketterna krockar. Försöker först med förra platsen."""
         occ: Dict[int, List[Tuple[float, float]]] = {r: [] for r in range(len(ROWS))}
+        soft: Dict[int, List[Tuple[float, float]]] = {r: [] for r in range(len(ROWS))}
         left_limit = 188 if self.me is not None else 8
         right_limit = self.box_w - 8
         out: Dict[int, Tuple[int, int]] = {}
@@ -439,17 +440,27 @@ class Scene:
                 tries.append(self.prev[i])
             tries += [(r, s) for r in range(len(ROWS)) for s in sides]
             done = False
-            for row, side in tries:
+            # Först en plats där en figur inte överlappar grannraderna, annars vilken som helst
+            # (hellre lite överlapp än att namnet försvinner).
+            for strict, (row, side) in [(st, t) for st in (True, False) for t in tries]:
+                if done:
+                    break
                 if side == 0 or side not in sides:
                     continue
                 a, b = span(x, w, kind, side)
                 if a < left_limit or b > right_limit:
                     continue
-                if free(row, a, b):
+                near_ok = not strict or (
+                    all(free(rr, x - 23, x + 23) for rr in (row - 1, row + 1) if rr in occ)
+                    and all(b < c or a > d for c, d in soft[row]))
+                if free(row, a, b) and near_ok:
                     occ[row].append((a, b))
+                    if kind:   # en figur är högre än en rad: håll grannraderna fria vid den
+                        for rr in (row - 1, row + 1):
+                            if rr in soft:
+                                soft[rr].append((x - 23, x + 23))
                     out[i] = (row, side)
                     done = True
-                    break
             if not done:
                 # Ingen plats för etiketten: bara pricken, i den rad där den krockar minst.
                 r = 23 if kind else 14

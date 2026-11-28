@@ -1071,7 +1071,10 @@ const PreviewPage = {
     Object.assign(this.hcImg.style, {left: 0, top: Math.min((H - ih) / 2, hb - ih) + "px", width: hw + "px", height: ih + "px", objectFit: "contain"});
     Object.assign(this.llImg.style, {left: hw + "px", top: 0, width: lw + "px", height: H + "px", objectFit: "contain"});
     Object.assign(this.llMsg.style, {left: hw + "px", top: 0, width: lw + "px", height: H + "px"});
-    Object.assign(this.credit.style, {left: hw + lw / 2 + "px", top: H - 20 + "px"});
+    // Källtexten ska rymmas i kartkolumnen (som i videon, där den görs mindre vid behov).
+    const ctext = S.placingOn ? "Karta och sträcktider: Livelox" : "Karta: Livelox";
+    const cfs = Math.max(6, Math.min(11, lw * 0.9 / (0.55 * ctext.length)));
+    Object.assign(this.credit.style, {left: hw + lw / 2 + "px", top: H - 6 - cfs * 1.4 + "px", fontSize: cfs + "px"});
     this.geom = {W, H, hw, lw, hb};
     const fw = S.outW - this.width();
     this.lwTxt.textContent = `Karta ${this.width()} px bred. Headcam-bilden blir ${fw} × ${Math.min(1080, Math.floor(fw * 9 / 16))} i Full HD.`;

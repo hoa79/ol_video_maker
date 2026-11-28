@@ -208,7 +208,7 @@ Du kan alltid klicka på **Tillbaka** och ändra.
    linjen? Välj **Ingen, visa bara linjen**. Då visas ingen stor placeringssiffra.
 6. **3 Välj vilka som syns:** Kryssa i upp till 8 löpare (du räknas med). Snabbknapparna
    **Topp 5 + du**, **Närmast dig** och **Din klubb** fyller i listan åt dig. Kolumnen längst
-   till höger visar hur namnet skrivs i videon, till exempel **Robin S.**
+   till höger visar hur namnet skrivs i videon, till exempel **Anna B.**
 7. Kryssa i **De jag visar med namn vet om det och tycker att det är okej** bara om du har
    frågat dem. Annars visas de andra bara med placering, utan namn.
 8. Klicka på **Nästa** och fortsätt med steg 2.

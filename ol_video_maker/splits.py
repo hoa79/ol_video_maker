@@ -2,10 +2,10 @@
 
 Livelox tabell kopieras som tabbseparerad text med två rader per löpare:
 
-    Pl  Name         Time   Time behind  3          5          …
-        Club                             513 m      482 m      …
-    1   Lova Strand  47:12  −0:31        8:02 (8)   5:56 (3)   …   <- sträcktid (placering)
-        OK Tallen                        8:02 (8)   13:58 (2)  …   <- tid totalt (placering)
+    Pl  Name         Time   Time behind  31         32         …
+        Club                             500 m      300 m      …
+    1   Anna Berg    30:00  −0:20        10:00 (2)  8:00 (1)   …   <- sträcktid (placering)
+        OK Exempel                       10:00 (2)  18:00 (1)  …   <- tid totalt (placering)
 
 Felstämplade (mp) och ej startade (dns) står längst ned. Tider kan vara h:mm:ss och
 minustecknet kan vara Unicode (−). Allt tolkas här med Pythons standardbibliotek.
@@ -151,7 +151,7 @@ def parse(text: str) -> Splits:
 
 
 def short_names(names: Sequence[str]) -> List[str]:
-    """Förnamn + första bokstaven i efternamnet ("Robin S."). Krockar två får fler bokstäver
+    """Förnamn + första bokstaven i efternamnet ("Anna B."). Krockar två får fler bokstäver
     ("Elias Ho." och "Elias Ha.")."""
     parts = [n.split() for n in names]
     out = []
