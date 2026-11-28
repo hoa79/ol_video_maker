@@ -254,7 +254,7 @@ function hideModal() { $("modal").hidden = true; $("modal").querySelector(".dial
 const LIVELOX_GUIDE = [
   {group: "I Livelox", text: "<b>Välj löparen</b> som ska visas. Kryssa i dig själv i listan <b>Participants</b>.",
    more: "Vill du visa flera? Kryssa i dem också.",
-   pic: `<img src="/static/livelox/deltagare.png" width="150" alt="Listan Participants i Livelox">`},
+   pic: `<img src="/static/livelox/deltagare.png" width="99" height="160" alt="Listan Participants i Livelox">`},
   {text: "<b>Välj uppspelningshastighet 1x.</b> Dra reglaget längst ner tills det står 1x.",
    more: "Annars går kartan inte i takt med headcam-filmen.",
    pic: `<img src="/static/livelox/hastighet.png" width="118" alt="Reglaget för hastighet">`},
