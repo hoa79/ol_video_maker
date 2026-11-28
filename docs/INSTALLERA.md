@@ -20,7 +20,7 @@ Python och ffmpeg (som gör själva videon) följer med i mappen.
    **https://github.com/hoa79/ol_video_maker/releases/latest**
 2. Scrolla ner till rubriken **Assets**. Där finns flera filer.
 3. Klicka på filen som heter **OL_Video_Maker_…_windows.zip** (till exempel
-   `OL_Video_Maker_0.5.0-beta_windows.zip`, ungefär 80 MB).
+   `OL_Video_Maker_0.6.0-beta_windows.zip`, ungefär 80 MB).
 
    > **Ladda inte ner "Source code (zip)" eller "Source code (tar.gz)".** De filerna lägger
    > GitHub till automatiskt. De innehåller bara programkoden och går inte att starta.
