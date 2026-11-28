@@ -30,12 +30,14 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, List, Optional, Sequence, Tuple
 
 if TYPE_CHECKING:  # pragma: no cover
+    from .placing_video import PlacingTrack
     from .pulse_video import PulseTrack
 
 OUT_W = 1920
 OUT_H = 1080
 DEFAULT_LIVELOX_WIDTH = 640
 DEFAULT_CREDIT = "Karta: Livelox"
+PLACING_CREDIT = "Karta och sträcktider: Livelox"   # när placeringslinjen visas (juristen)
 
 # Ordning vi provar H.264-kodare i. libx264 ger bäst kvalitet men är GPL;
 # libopenh264 (BSD) och h264_mf (Windows inbyggd) är alternativ.
@@ -454,6 +456,7 @@ class Job:
     headcam_flip: bool = False        # vänd headcam-bilden 180° (kameran satt upp och ner)
     scale: int = 1                    # 1 = Full HD (1920x1080), 2 = 4K (3840x2160)
     pulse: Optional["PulseTrack"] = None  # puls från klockan (frivilligt), se pulse_video.py
+    placing: Optional["PlacingTrack"] = None  # placeringslinjen (frivilligt), placing_video.py
 
 
 @dataclass
@@ -465,6 +468,7 @@ class Plan:
     temp_files: List[str] = field(default_factory=list)
     credit_drawn: bool = False
     pulse_drawn: bool = False
+    placing_drawn: bool = False
 
 
 def _even(x: float) -> int:
@@ -490,6 +494,8 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
         )
     if not (160 <= job.livelox_width <= OUT_W - 640):
         raise VideoMakerError("Livelox-kolumnens bredd måste vara mellan 160 och 1280 pixlar.")
+    if job.pulse is not None and job.placing is not None:
+        raise VideoMakerError("Fältet under videon räcker till en sak: välj puls eller placering.")
     if job.scale not in (1, 2):
         raise VideoMakerError("Upplösningen måste vara Full HD eller 4K.")
     # Full HD (1920x1080) eller 4K (3840x2160): allt mäts i Full HD-pixlar och skalas upp.
@@ -551,7 +557,18 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
     # Med puls: headcam-bilden får plats ovanför pulsbandet längst ner, så bandet aldrig
     # täcker filmen. En 16:9-film hamnar på samma ställe som utan puls.
     band = None
+    pband = None
     hc_box_h = H
+    if job.placing is not None:
+        from .placing_video import BAND_H as PBAND_H, build_band as build_placing
+        hc_box_h = H - PBAND_H * k
+        if tmpdir is None:
+            tmpdir = tempfile.mkdtemp(prefix="olvm_placering_")
+            temp_files.append(tmpdir)
+        first = ll_idx + 1 + (0 if hc_audio else 1)
+        pband = build_placing(job.placing, tmpdir, k, hc_box_w // k, start, duration, first,
+                              (font, bold_font), _escape_filter_value)
+        cmd += pband.inputs
     if job.pulse is not None:
         from .pulse_video import BAND_H, build_band
         hc_box_h = H - BAND_H * k
@@ -609,12 +626,17 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
     # om Livelox-inspelningen tar slut före headcam-videon.
     overlay = f"[base][ll]overlay=x={ll_x}+({lw}-w)/2:y=({H}-h)/2:eof_action=repeat"
     credit_drawn = False
-    if job.credit_text and font:
-        # Källtexten ritas längst ner i Livelox-kolumnen, aldrig över headcam.
+    credit = job.credit_text
+    if credit == DEFAULT_CREDIT and job.placing is not None:
+        credit = PLACING_CREDIT
+    if credit and font:
+        # Källtexten ritas längst ner i Livelox-kolumnen, aldrig över headcam. En lång text
+        # görs mindre så att den får plats i en smal kolumn.
+        size = max(14, min(28, int(job.livelox_width * 0.9 / (0.52 * max(1, len(credit))))))
         overlay += (
             f",drawtext=fontfile='{_escape_filter_value(font)}'"
-            f":text='{_escape_filter_value(job.credit_text)}'"
-            f":expansion=none:fontsize={28 * k}:fontcolor=white:box=1:boxcolor=black@0.55:boxborderw={8 * k}"
+            f":text='{_escape_filter_value(credit)}'"
+            f":expansion=none:fontsize={size * k}:fontcolor=white:box=1:boxcolor=black@0.55:boxborderw={8 * k}"
             f":x={ll_x}+({lw}-text_w)/2:y=h-text_h-{24 * k}"
         )
         credit_drawn = True
@@ -648,6 +670,11 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
                     )
         chains += band.chains
         pulse_drawn = True
+    placing_drawn = False
+    if pband is not None:
+        overlay += pband.overlays
+        chains += pband.chains
+        placing_drawn = True
     overlay += ",format=yuv420p[v]"
     filtergraph = ";".join(chains + [hc_chain, ll_chain, overlay])
 
@@ -664,7 +691,8 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
         job.output_file,
     ]
     return Plan(cmd=cmd, duration=duration, encoder=encoder, hwaccel=hwaccel,
-                temp_files=temp_files, credit_drawn=credit_drawn, pulse_drawn=pulse_drawn)
+                temp_files=temp_files, credit_drawn=credit_drawn, pulse_drawn=pulse_drawn,
+                placing_drawn=placing_drawn)
 
 
 # ---------------------------------------------------------------------------
@@ -741,7 +769,11 @@ def render(job: Job, progress: Optional[ProgressCallback] = None,
     hc_infos = [probe(p) for p in job.headcam_files]
     ll_info = probe(job.livelox_file)
     font = bold_font = None
-    if (job.credit_text or job.pulse is not None) and has_filter("drawtext"):
+    if job.placing is not None and not has_filter("ass"):
+        raise VideoMakerError("Den här ffmpeg kan inte rita placeringslinjen (filtret ass "
+                              "saknas). Använd ffmpeg som följer med programmet.")
+    if (job.credit_text or job.pulse is not None or job.placing is not None) \
+            and has_filter("drawtext"):
         font = find_font()
         bold_font = find_font(bold=True)
 

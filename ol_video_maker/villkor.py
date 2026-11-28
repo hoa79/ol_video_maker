@@ -16,10 +16,10 @@ import json
 import os
 from typing import Any, Dict, Optional
 
-# Juristens text (granskad 2026-11-27). Ändra inte orden utan att juristen granskar igen.
+# Juristens text (granskad 2026-11-27, punkt 3 tillagd 2026-11-28 i version 2). Ändra inte orden utan att juristen granskar igen.
 # **fet** och *kursiv* är den enda formatering som används. Varje punkt har en rubrik och
 # block: ("p", stycke) eller ("ul", [punktlista]).
-VERSION = 1
+VERSION = 2
 TITLE = "Innan du börjar"
 INTRO = ("OL Video Maker är ett gratis program som gör en video av din headcam-film och din "
          "Livelox-inspelning. Läs de här villkoren och godkänn dem för att använda programmet.")
@@ -39,6 +39,17 @@ POINTS = [
               "internet. Fråga gärna dem som syns tydligt om det är okej, och ta bort eller "
               "klipp bort personer som inte vill vara med."),
     ]),
+    ("Du ansvarar för namnen och resultaten du visar.", [
+        ("p", "Om du lägger in sträcktider kan andra löpares namn och placeringar synas i videon. "
+              "Det är du som gör videon och bestämmer vilka som visas, och du ansvarar för det."),
+        ("ul", ["Fråga dem du visar med namn om det är okej innan du lägger ut videon.",
+                "Visa hellre för få än för många. Löpare som inte har sagt ja kan visas utan namn, "
+                "bara med placering.",
+                "Var extra försiktig med barn och ungdomar. Fråga deras föräldrar.",
+                "Om någon ber dig ta bort sitt namn ska du göra det, till exempel genom att göra "
+                "om videon.",
+                "Ange Livelox som källa, till exempel: *\"Karta och sträcktider: Livelox\"*."]),
+    ]),
     ("Du ansvarar för att du får publicera allt i videon.", [
         ("p", "Det gäller till exempel kartan, musik och annat material som någon annan har "
               "gjort."),
@@ -53,7 +64,8 @@ POINTS = [
     ("Du bestämmer över din puls och dina filer.", [
         ("p", "Programmet skickar inte dina filmer, din karta eller din puls någonstans. Allt "
               "sker på din dator. Om du lägger pulsen i videon och publicerar den är det ditt "
-              "val att dela den."),
+              "val att dela den. Programmet skickar inte heller sträcktiderna du klistrar in "
+              "någonstans."),
     ]),
     ("Utvecklarna ansvarar inte för vad som filmas eller hur videorna används.", [
         ("p", "Det är du som filmar, gör videon och bestämmer var den publiceras. Utvecklarna "
