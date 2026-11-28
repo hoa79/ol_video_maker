@@ -36,7 +36,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import parse_qs, urlparse
 
-from . import __version__, villkor
+from . import __version__, speedcache, villkor
 from .core import (DEFAULT_LIVELOX_WIDTH, OUT_W, Job, MediaInfo, VideoMakerError, check_tools,
                    ensure_mp4, find_tool, format_time, is_packaged, probe, render,
                    sort_headcam_files)
@@ -53,6 +53,7 @@ LEAD_IN = 5.0          # sekunder före starten som tas med i videon
 PREVIEW_SECONDS = 20   # längd på provvideor
 PREVIEW_PREFIX = "OL_Video_provvideo_"
 BENCH_SECONDS = 6.0    # så lång provbit som skapas för att mäta datorns hastighet
+MIN_LEARN_SECONDS = 20.0  # kortare videor än så används inte för att lära sig hastigheten
 LW_MIN, LW_MAX = 320, 960
 MAX_FRAME = (1920, 1080)
 HEARTBEAT_TIMEOUT = 8.0   # sekunder utan kontakt från sidan innan programmet avslutas
@@ -242,8 +243,12 @@ class State:
         self.livelox_width = DEFAULT_LIVELOX_WIDTH
         self.output = ""
         self.quality = 1
-        self.estimates: Dict[int, Optional[float]] = {1: None, 2: None}
+        # Hur snabbt datorn skapar video (sekunder video per sekund) i Full HD (1) och 4K (2),
+        # för den sorts filmer som är valda. Tiden räknas fram ur längden, så att ändrad start
+        # eller målgång inte kräver någon ny provvideo. Se speedcache.py.
+        self.speeds: Dict[int, Optional[float]] = {1: None, 2: None}
         self.bench_key = None
+        self.bench_running = False
         self.bench_cancel = False
         self.tools_error: Optional[str] = None
         # Pågående video (provvideo eller den riktiga)
@@ -285,8 +290,8 @@ class State:
                 "videoLength": self.video_length(), "leadIn": LEAD_IN,
                 "previewSeconds": PREVIEW_SECONDS,
                 "output": self.output, "quality": self.quality,
-                "estimates": {str(k): v for k, v in self.estimates.items()},
-                "benchRunning": self.bench_key is not None and None in self.estimates.values(),
+                "estimates": {str(k): self.estimate(k) for k in (1, 2)},
+                "benchRunning": self.bench_running,
                 "running": self.running, "render": dict(self.render),
                 "termsAccepted": self.terms_accepted,
                 "terms": None if self.terms_accepted else villkor.as_dict(),
@@ -537,17 +542,21 @@ class State:
             self.bench_cancel = True
             job = self.make_job(out)
             job.scale = self.quality
-            est = self.estimates.get(self.quality)
+            est = self.estimate(self.quality)
+            speed_key = self._speed_key(job.scale)
+            length = self.video_length()
         q = "4K" if job.scale == 2 else "Full HD"
         extra = f" Beräknad tid: {fmt_estimate(est)}." if est else ""
-        self._start_render("make", job, f"Skapar videon i {q}…{extra}", open_when_done=False)
+        self._start_render("make", job, f"Skapar videon i {q}…{extra}", open_when_done=False,
+                           speed_key=speed_key, length=length)
         return {}
 
     def _ready_for_video(self) -> bool:
         return bool(self.hc_tl and self.ll_tl and self.hc_sync is not None
                     and self.ll_sync is not None)
 
-    def _start_render(self, kind: str, job: Job, text: str, open_when_done: bool) -> None:
+    def _start_render(self, kind: str, job: Job, text: str, open_when_done: bool,
+                      speed_key: Optional[str] = None, length: float = 0.0) -> None:
         with self.lock:
             if self.running:
                 return
@@ -562,6 +571,7 @@ class State:
 
         def work():
             path, error = None, None
+            started = time.monotonic()
             try:
                 path = render(job, progress=progress, cancel_flag=lambda: self.cancel,
                               on_process=lambda p: setattr(self, "proc", p))
@@ -581,6 +591,13 @@ class State:
                     r.update(ok=True, path=path, progress=1.0,
                              text=f"✓ Klart! Sparad som {os.path.basename(path)}")
                 self.render = r
+            elapsed = time.monotonic() - started
+            if path and speed_key and length >= MIN_LEARN_SECONDS and elapsed > 1:
+                # En riktig video är den bästa mätningen: spara den till nästa gång.
+                speedcache.put(speed_key, length / elapsed, source="video")
+                with self.lock:
+                    if self._speed_key(job.scale) == speed_key:
+                        self.speeds[job.scale] = speedcache.get(speed_key)
             if path and open_when_done:
                 _open_file(path)
         threading.Thread(target=work, daemon=True).start()
@@ -611,20 +628,37 @@ class State:
                 pass
 
     # --- tidsuppskattning i steg 5 ---
-    def _key(self):
-        return (self.hc_sync, self.ll_sync, self.end_time, self.hc_flip, self.livelox_width,
-                tuple(c.path for c in self.hc_tl.clips) if self.hc_tl else (), self.hr_id
-                if self.hr else None, self.fit_start)
+    def _speed_key(self, scale: int) -> Optional[str]:
+        """Vilken sorts film det är, för minnet av datorns hastighet. Start, målgång,
+        vändning och kartans bredd påverkar knappt hastigheten och ingår inte."""
+        if not self.hc_infos or self.ll_info is None:
+            return None
+        return speedcache.profile(self.hc_infos[0], self.ll_info,
+                                  self.pulse_track() is not None, scale)
+
+    def estimate(self, scale: int) -> Optional[float]:
+        speed = self.speeds.get(scale)
+        if not speed:
+            return None
+        return self.video_length() / max(speed, 1e-3) + 5
 
     def bench(self, _body) -> Dict[str, Any]:
-        """Mät hur snabbt datorn skapar video genom att göra en kort provbit i varje upplösning."""
+        """Ta fram datorns hastighet för de valda filmerna. Finns den sparad sedan tidigare
+        (samma sorts filmer) används den direkt. Annars görs en kort provbit, bara för den
+        upplösning som saknas, och resultatet sparas till nästa gång."""
         with self.lock:
-            if not self._ready_for_video() or self.bench_key == self._key():
+            if not self._ready_for_video() or self.running:
                 return {}
-            key = self.bench_key = self._key()
-            self.estimates = {1: None, 2: None}
+            keys = {scale: self._speed_key(scale) for scale in (1, 2)}
+            if self.bench_key == keys and (self.bench_running or None not in self.speeds.values()):
+                return {}
+            self.bench_key = keys
+            self.speeds = {scale: speedcache.get(k) if k else None for scale, k in keys.items()}
+            missing = [scale for scale in (1, 2) if self.speeds[scale] is None]
+            if not missing:
+                return {}
+            self.bench_running = True
             self.bench_cancel = False
-            length = self.video_length()
 
         def measure(scale):
             out = os.path.join(tempfile.gettempdir(),
@@ -647,23 +681,30 @@ class State:
             moving = [m for m in marks if 0 < m[1] < 1]
             seg = job.end_time - start
             if len(moving) >= 2 and moving[-1][1] > moving[0][1]:
-                speed = (moving[-1][1] - moving[0][1]) * seg / (moving[-1][0] - moving[0][0])
-            else:
-                speed = seg / max(0.5, marks[-1][0] - marks[0][0]) if len(marks) >= 2 else 1.0
-            return length / max(speed, 1e-3) + 5
+                return (moving[-1][1] - moving[0][1]) * seg / (moving[-1][0] - moving[0][0])
+            return seg / max(0.5, marks[-1][0] - marks[0][0]) if len(marks) >= 2 else 1.0
 
         def work():
-            for scale in (1, 2):
-                try:
-                    est = measure(scale)
-                except Exception:
+            try:
+                for scale in missing:
                     with self.lock:
-                        if self.bench_key == key:
-                            self.bench_key = None  # mät igen nästa gång steget visas
-                    return
+                        if self.bench_key != keys:
+                            return  # filmerna har bytts, en ny mätning har tagit över
+                    try:
+                        speed = measure(scale)
+                    except Exception:
+                        with self.lock:
+                            if self.bench_key == keys:
+                                self.bench_key = None  # mät igen nästa gång steget visas
+                        return
+                    speedcache.put(keys[scale], speed, source="prov")
+                    with self.lock:
+                        if self.bench_key == keys:
+                            self.speeds[scale] = speed
+            finally:
                 with self.lock:
-                    if self.bench_key == key:
-                        self.estimates[scale] = est
+                    if self.bench_key == keys or self.bench_key is None:
+                        self.bench_running = False
         threading.Thread(target=work, daemon=True).start()
         return {}
 
