@@ -160,7 +160,7 @@ class SceneTest(unittest.TestCase):
         self.assertFalse(any(t.endswith(":a") or t.endswith(":e") for t in texts))
         self.assertFalse(any(it.slot == "gul" for it in items))
         self.assertFalse(any("Anna" in t or "Elias" in t for t in texts))
-        self.assertIn("lopptid 15:00", texts)
+        self.assertIn("snabb", texts)
 
     def test_never_mp_text_and_max_8(self):
         tr = PlacingTrack(self.sp, [0, 1, 2, 3, 4, 5], me=None, consent=True)
@@ -230,6 +230,15 @@ class LiveloxTimeTest(unittest.TestCase):
         tr = PlacingTrack(self.sp, [0, 1], me=None, consent=True, race_start=100.0,
                           race_end=2000.0)
         self.assertAlmostEqual(tr.race_time(700.0), 600.0)
+
+    def test_legend_replaces_race_clock(self):
+        for me in (2, None):
+            tr = PlacingTrack(self.sp, [0, 1], me=me, consent=True)
+            texts = [t for it in Scene(tr, 1280).at(600) if isinstance(it.obj, Text)
+                     for t, _, _ in it.obj.parts]
+            self.assertIn("snabb", texts)
+            self.assertIn("trött", texts)
+            self.assertFalse(any(t.startswith("lopptid") for t in texts))
 
     def test_band_follows_livelox_time(self):
         tmp = tempfile.mkdtemp()

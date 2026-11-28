@@ -317,8 +317,9 @@ class Scene:
     """Räknar ut vad som ska ritas. Kommer ihåg var etiketterna stod förra gången, så att de
     inte hoppar mellan raderna i onödan."""
 
-    def __init__(self, track: PlacingTrack, box_w: int) -> None:
+    def __init__(self, track: PlacingTrack, box_w: int, legend: str = "A") -> None:
         self.track = track
+        self.legend = legend
         sp = track.splits
         self.me = track.me if track.me is not None and track.me < len(sp.runners) else None
         self.shown = [i for i in dict.fromkeys(track.shown + ([self.me] if self.me is not None
@@ -386,16 +387,14 @@ class Scene:
                 if small:
                     items.append(Item("vid", 3, Text(30, 1011, [(small, WHITE, False)], 20,
                                                      outline=0, alpha=0.8 * m.visible)))
-                if abs(m.trend) >= TREND_LIMIT:
+                if abs(m.trend) >= TREND_LIMIT and self.legend != "B":
                     up = m.trend > 0
                     items.append(Item("trend", 3, Text(
                         30, 1041, [(f"{'▲' if up else '▼'} {abs(m.trend)} på sträckan",
                                     GREEN if up else ORANGE, True)], 20, outline=0)))
-            items.append(Item("lopptid", 3, Text(30, 1065, [(f"lopptid {_clock(t)}", WHITE,
-                                                             False)], 15, outline=0, alpha=0.45)))
+            items += self.legend_items(30, 1065)
         else:
-            items.append(Item("lopptid", 3, Text(48, 923, [(f"lopptid {_clock(t)}", WHITE,
-                                                            False)], 17, outline=0, alpha=0.6)))
+            items += self.legend_items(30, 923)
         # Löparna: prickar i rader ovanför linjen, etiketter bredvid.
         boxes = []
         for i in self.shown:
@@ -430,6 +429,26 @@ class Scene:
                                                           align="l" if side > 0 else "r",
                                                           alpha=a)))
         return items
+
+    def legend_items(self, x: float, y: float) -> List[Item]:
+        """Teckenförklaringen för figurerna (där lopptiden stod förut). Figurerna står still
+        här och är mindre än på linjen."""
+        s = 0.5
+        if self.legend == "B":
+            rows = [("fast", "tar 3+ plac.", y - 24), ("tired", "tappar 3+ plac.", y)]
+        else:
+            rows = [("fast", "snabb", y), ("tired", "trött", y)]
+        out: List[Item] = []
+        cx = x + FIG_R * s
+        for j, (kind, label, yy) in enumerate(rows):
+            if self.legend != "B" and j == 1:
+                cx = x + 88 + FIG_R * s
+            for k_, sh in enumerate(place_shapes(figure_shapes(kind, 3), cx, yy, s)):
+                out.append(Item(f"forkl_{kind}{k_}", 3, sh))
+            out.append(Item(f"forkl_{kind}_text", 3,
+                            Text(cx + FIG_R * s + 6, yy, [(label, WHITE, False)], 15,
+                                 outline=0, alpha=0.75)))
+        return out
 
     def _rows(self, boxes) -> Dict[int, Tuple[int, int]]:
         """Lägg varje löpare i en rad och på en sida (1 höger, -1 vänster, 0 = ingen etikett)
