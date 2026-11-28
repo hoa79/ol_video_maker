@@ -92,3 +92,42 @@ class ClockRenderTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClockStateTest(unittest.TestCase):
+    """Fönstrets läge: klockan i jobbet och videon 5 s efter målgången."""
+
+    def setUp(self):
+        from types import SimpleNamespace
+        from ol_video_maker.webapp import Dialogs, State
+        self.old = os.environ.get("OLVM_DATA_DIR")
+        os.environ["OLVM_DATA_DIR"] = tempfile.mkdtemp()
+        st = State(Dialogs())
+        clip = SimpleNamespace(path="hc.mp4")
+        st.hc_tl = SimpleNamespace(clips=[clip], duration=1000.0)
+        st.ll_tl = SimpleNamespace(clips=[SimpleNamespace(path="ll.mp4")], duration=1000.0)
+        st.hc_sync, st.ll_sync = 100.0, 10.0
+        self.st = st
+
+    def tearDown(self):
+        if self.old is None:
+            os.environ.pop("OLVM_DATA_DIR", None)
+        else:
+            os.environ["OLVM_DATA_DIR"] = self.old
+
+    def test_clock_on_by_default(self):
+        job = self.st.make_job("ut.mp4")
+        self.assertIsNotNone(job.clock)
+        self.assertEqual(job.clock.race_start, 100.0)
+        self.assertIsNone(job.end_time)
+        self.st.set_clock({"on": False})
+        self.assertIsNone(self.st.make_job("ut.mp4").clock)
+
+    def test_five_seconds_after_finish(self):
+        self.st.end_time = 600.0
+        job = self.st.make_job("ut.mp4")
+        self.assertEqual(job.end_time, 605.0)       # videon
+        self.assertEqual(job.clock.finish, 600.0)   # klockan stannar vid målgången
+        self.assertAlmostEqual(self.st.video_length(), 605.0 - 95.0)
+        self.st.end_time = 998.0                    # aldrig längre än filmen
+        self.assertEqual(self.st.make_job("ut.mp4").end_time, 1000.0)

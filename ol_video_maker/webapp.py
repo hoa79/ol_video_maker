@@ -55,6 +55,7 @@ GUIDE_URL = "https://github.com/hoa79/ol_video_maker/blob/main/docs/GUIDE.md"
 FIT_TYPES = [("Pulsfil från klockan", "*.fit *.FIT *.zip *.ZIP"), ("Alla filer", "*.*")]
 VIDEO_TYPES = [("Videofiler", "*.mp4 *.MP4 *.mov *.MOV *.mkv *.webm *.avi"), ("Alla filer", "*.*")]
 LEAD_IN = 5.0          # sekunder före starten som tas med i videon
+AFTER_FINISH = 5.0     # sekunder efter målgången (klockan syns stanna, grön)
 PREVIEW_SECONDS = 20   # längd på provvideor
 PREVIEW_PREFIX = "OL_Video_provvideo_"
 BENCH_SECONDS = 6.0    # så lång provbit som skapas för att mäta datorns hastighet
@@ -315,7 +316,7 @@ class State:
                 "terrainOn": self.terrain_track() is not None,
                 "clockOn": self.clock_on,
                 "placing": self.placing_info(),
-                "videoLength": self.video_length(), "leadIn": LEAD_IN,
+                "videoLength": self.video_length(), "leadIn": LEAD_IN, "afterFinish": AFTER_FINISH,
                 "previewSeconds": PREVIEW_SECONDS,
                 "output": self.output, "quality": self.quality,
                 "fast4k": self.fast4k, "canFast": self._can_fast(),
@@ -331,8 +332,14 @@ class State:
     def video_length(self) -> float:
         if not self.hc_tl or self.hc_sync is None:
             return 0.0
-        end = self.end_time if self.end_time is not None else self.hc_tl.duration
-        return max(0.0, end - max(0.0, self.hc_sync - LEAD_IN))
+        return max(0.0, self.video_end() - max(0.0, self.hc_sync - LEAD_IN))
+
+    def video_end(self) -> float:
+        """Där videon slutar i headcam-filmen: 5 s efter målgången, eller filmens slut.
+        Banden och klockan använder själva målgången (end_time)."""
+        if self.end_time is None:
+            return self.hc_tl.duration
+        return min(self.hc_tl.duration, self.end_time + AFTER_FINISH)
 
     def pulse_track(self) -> Optional[PulseTrack]:
         if self.under != "pulse" or self.hr is None or self.fit_start is None or self.hc_sync is None or not self.hc_tl:
@@ -415,7 +422,9 @@ class State:
         return Job(headcam_files=[c.path for c in self.hc_tl.clips],
                    livelox_file=self.ll_tl.clips[0].path, output_file=output,
                    headcam_sync=self.hc_sync or 0.0, livelox_sync=self.ll_sync or 0.0,
-                   lead_in=LEAD_IN, end_time=self.end_time, livelox_width=self.livelox_width,
+                   lead_in=LEAD_IN,
+                   end_time=None if self.end_time is None else self.video_end(),
+                   livelox_width=self.livelox_width,
                    headcam_flip=self.hc_flip, pulse=self.pulse_track(),
                    placing=self.placing_track(), terrain=self.terrain_track(),
                    clock=self.clock_track())
@@ -730,8 +739,7 @@ class State:
                 job.tail_seconds = PREVIEW_SECONDS
             elif kind == "here":
                 t = float(body.get("t", self.hc_sync))
-                limit = self.end_time if self.end_time is not None else self.hc_tl.duration
-                job.end_time = min(limit, t + PREVIEW_SECONDS / 2)
+                job.end_time = min(self.video_end(), t + PREVIEW_SECONDS / 2)
                 job.tail_seconds = PREVIEW_SECONDS
             else:
                 job.end_time = min(job.end_time or self.hc_tl.duration,

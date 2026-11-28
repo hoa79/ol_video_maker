@@ -1005,7 +1005,7 @@ const EndPage = {
     }
     this.v.setMarked(S.endTime);
     this.facts.innerHTML = `Börjar <b>${S.leadIn} s före starten</b><br>` +
-      `Slutar <b>${S.endTime === null ? "vid filmens slut" : "vid " + fmt(S.endTime)}</b><br>` +
+      `Slutar <b>${S.endTime === null ? "vid filmens slut" : S.afterFinish + " s efter målgången"}</b><br>` +
       `Längd ungefär <b>${fmtLong(S.videoLength)}</b>`;
     const none = S.endTime === null;
     this.skipT.textContent = none ? "Vill du inte välja slut?" : "Vill du ha med allt?";
@@ -1343,7 +1343,7 @@ const CreatePage = {
   show() { api("bench"); },
   update() {
     const vals = [["Start i headcam", fmt(S.hcSync)], ["Start i Livelox", fmt(S.llSync)],
-      ["Slut", S.endTime === null ? "Hela filmen" : fmt(S.endTime)], ["Längd", "ca " + fmtLong(S.videoLength)]];
+      ["Målgång", S.endTime === null ? "Hela filmen" : fmt(S.endTime)], ["Längd", "ca " + fmtLong(S.videoLength)]];
     if (S.flip) vals.push(["Headcam", "Vänd 180°"]);
     if (S.pulse) vals.push(["Under videon", "♥ Puls"]);
     if (S.placingOn) vals.push(["Under videon", "🏃 Placering"]);

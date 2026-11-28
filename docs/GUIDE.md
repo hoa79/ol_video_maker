@@ -170,7 +170,8 @@ Du kan alltid klicka på **Tillbaka** och ändra.
          provvideon i steg 4.
 5. **Steg 3, Välj målgång (frivilligt):** Dra reglaget till målgången och klicka på
    **Målgång är här**. Vill du ha med allt, klicka bara på **Nästa**. (Har du redan valt ett
-   slut kan du klicka på **Ta med hela filmen**.)
+   slut kan du klicka på **Ta med hela filmen**.) Videon fortsätter 5 sekunder efter
+   målgången, så att man hinner se klockan stanna.
 6. **Steg 4, Titta på provbit:**
    1. Dra reglaget och titta på några ställen i loppet. Kartan till höger ska visa var du är.
    2. Välj **Starten** och klicka på **Gör provvideo** för att se 20 sekunder med rörelse och ljud.
