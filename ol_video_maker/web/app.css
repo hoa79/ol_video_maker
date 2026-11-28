@@ -60,6 +60,9 @@ h1{font-size:26px;margin:4px 0 6px}
 .card h2{font-size:15px;display:flex;align-items:center;gap:8px;margin-bottom:10px;min-width:0}
 .card h2 small{margin-left:auto;font-weight:400;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .num{width:24px;height:24px;border-radius:50%;background:var(--primary);color:#fff;display:inline-grid;place-items:center;font-size:12.5px;font-weight:700;flex:none}
+/* Klar del: siffran byts mot en grön bock (siffran finns kvar för skärmläsare). */
+.num.ok,.anum.ok{background:var(--ok);border-color:var(--ok);color:#fff;font-size:0}
+.num.ok::after,.anum.ok::after{content:"✓";font-size:13.5px}
 .panel{width:300px;flex:none;display:flex;flex-direction:column;gap:14px}
 .box{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
 .box h3{font-size:14.5px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
@@ -68,6 +71,11 @@ h1{font-size:26px;margin:4px 0 6px}
 .box h3.muted{color:var(--muted)}
 
 /* ---------- film ---------- */
+/* Kort med film (steg 2, 3 och 4): kortet är så högt som innehållet, så reglagen sitter
+   direkt under bilden. Bara i lågt fönster krymper bilden för att allt ska rymmas. */
+.row.fit{align-items:flex-start}
+.row.fit>.card{max-height:100%}
+.row.fit .vid{flex:0 1 auto;aspect-ratio:16/9}
 .vid{flex:1;min-height:120px;border-radius:8px;background:#000;position:relative;overflow:hidden;cursor:pointer}
 .vid img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 .vid .msg{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:#fff;padding:20px;font-size:13.5px}

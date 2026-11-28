@@ -69,6 +69,10 @@ function clock(t, seconds = true) {
 }
 function day(t) { const d = new Date(t * 1000); return `${d.getDate()} ${MONTHS[d.getMonth()]}`; }
 
+// Siffermärket vid en knapp eller ett kort blir en grön bock när den delen är klar.
+function num(n) { return h("span", {class: "num"}, n); }
+function setDone(el, done) { if (el) el.classList.toggle("ok", !!done); }
+
 function setRange(input, v) {
   input.value = v;
   paintRange(input);
@@ -194,9 +198,11 @@ function showTerms() {
     await api("accept_terms", {version: t.version});
     if (!S.termsAccepted) accept.disabled = !box.checked;
   }}, t.accept + " ›");
+  const n1 = h("span", {class: "anum"}, "1");
   box.addEventListener("change", () => {
     accept.disabled = !box.checked;
     agree.classList.toggle("on", box.checked);
+    setDone(n1, box.checked);
   });
   const agree = h("label", {class: "agree", for: "terms-ok"}, box, h("span", {class: "cb"}), t.checkbox);
   const decline = h("button", {class: "btng", onclick: quitApp}, t.decline);
@@ -205,7 +211,7 @@ function showTerms() {
   root.append(
     h("div", {class: "termwrap"}, card, fade),
     h("div", {class: "tfoot"},
-      h("div", {class: "act"}, h("span", {class: "anum"}, "1"), agree),
+      h("div", {class: "act"}, n1, agree),
       h("div", {class: "trow"}, decline, h("span", {class: "spacer"}),
         h("div", {class: "act"}, h("span", {class: "anum"}, "2"), accept))));
   checkFade();
@@ -383,7 +389,7 @@ class Viewer {
     this.status = h("div", {class: "status"});
     const nudges = [["« 10 s", -10], ["‹ 1 s", -1], ["‹ bild", "-f"], ["bild ›", "+f"], ["1 s ›", 1], ["10 s »", 10]];
     this.el = h("div", {class: "card"},
-      h("h2", {}, o.step ? h("span", {class: "num"}, o.step) : null, o.title, this.name, flip),
+      h("h2", {}, this.num = o.step ? num(o.step) : null, o.title, this.name, flip),
       this.vid, this.range,
       h("div", {class: "timerow"}, this.time,
         h("button", {class: "ghost", onclick: () => this.play()}, "▶ Spela 3 s")),
@@ -412,6 +418,7 @@ class Viewer {
       b.textContent = "✓ " + o.markedText.replace("{}", fmt(t));
       this.status.textContent = "Ändra genom att trycka igen";
     }
+    setDone(this.num, t !== null && t !== undefined);
   }
   seek(t, fromRange) {
     if (!this.info) return;
@@ -502,7 +509,7 @@ const FilesPage = {
       c.loader = new FrameLoader(c.img, src);
       c.src = src;
       c.el = h("div", {class: "card pick"},
-        h("h2", {}, h("span", {class: "num"}, step), `${icon} ${title}`),
+        h("h2", {}, c.num = num(step), `${icon} ${title}`),
         c.empty, c.thumb, c.status, h("div", {}, c.btn), c.hint, c.link);
       this.cards[which] = c;
       row.append(c.el);
@@ -532,7 +539,7 @@ const FilesPage = {
     p.pbtn = h("button", {class: "ghost lg", onclick: () => show(PAGES.indexOf(PlacingPage))}, "Ändra urval…");
     p.placing = h("div", {class: "udetail"}, h("div", {class: "pulsemid"}, p.pstatus), h("div", {class: "btnrow"}, p.pbtn));
     const under = h("div", {class: "card undercard"},
-      h("h2", {}, h("span", {class: "num"}, 3), "Under videon ", h("span", {class: "tag"}, "Frivilligt")),
+      h("h2", {}, p.num = num(3), "Under videon ", h("span", {class: "tag"}, "Frivilligt")),
       h("p", {class: "usub"}, "Fältet under headcam-filmen räcker till en sak. Välj vad som ska visas där."),
       h("div", {class: "uopts"},
         opt("none", "", "Ingenting", "Bara film och karta"),
@@ -564,6 +571,7 @@ const FilesPage = {
         }
       } else c.status.textContent = "";
       c.status.hidden = !c.status.textContent;
+      setDone(c.num, info && !loading && !err);
       // En huvudknapp i taget: den film som ska väljas härnäst är lila.
       if (info) { c.btn.className = "ghost lg"; c.btn.textContent = "Byt film…"; }
       else { c.btn.className = which === next ? "big" : "big second"; c.btn.textContent = c.btnText; }
@@ -606,6 +614,7 @@ const FilesPage = {
       p.pbtn.textContent = "Klistra in sträcktider…";
     }
     p.remove.hidden = !hr;
+    setDone(p.num, (S.under === "pulse" && hr) || (S.under === "placing" && pl && pl.runners.length));
   },
 };
 
@@ -649,7 +658,7 @@ const PlacingPage = {
     this.sel = h("select", {class: "mesel", onchange: () => api("set_me", {name: this.sel.value === "__ingen__" ? "" : this.sel.value})});
     this.meHelp = h("p", {class: "small"});
     this.forget = h("a", {class: "textlink", onclick: () => api("forget_me")}, "Glöm mitt namn");
-    this.h2 = h("h2", {}, h("span", {class: "num"}, 2), "Vem är du?");
+    this.h2 = h("h2", {}, this.n2 = num(2), "Vem är du?");
     this.chips = {};
     const chip = (kind, text) => (this.chips[kind] = h("button", {class: "chip", onclick: () => api("preset_shown", {kind})}, text));
     this.count = h("span", {class: "count"});
@@ -658,11 +667,11 @@ const PlacingPage = {
     this.consent = h("label", {class: "consent", for: "consent"}, this.cbox, h("span", {class: "cb"}),
       h("div", {}, h("b", {}, "De jag visar med namn vet om det och tycker att det är okej."), this.consentSub = h("small")));
     this.right = h("div", {class: "card pcol"},
-      h("h2", {}, h("span", {class: "num"}, 3), "Välj vilka som syns", this.count),
+      h("h2", {}, this.n3 = num(3), "Välj vilka som syns", this.count),
       h("div", {class: "chips"}, chip("top", "Topp 5 + du"), chip("near", "Närmast dig"), chip("club", "Din klubb"), chip("clear", "Rensa")),
       this.list, this.consent);
     this.left = h("div", {class: "card pcol pleft"},
-      h("h2", {}, h("span", {class: "num"}, 1), "Klistra in sträcktiderna"),
+      h("h2", {}, this.n1 = num(1), "Klistra in sträcktiderna"),
       this.ta, this.ok, this.help, this.h2, this.sel, this.meHelp, this.forget);
     root.append(h("div", {class: "row grow"}, this.left, this.right));
     this.shownId = null;
@@ -709,6 +718,7 @@ const PlacingPage = {
     this.chips.near.disabled = me === null; this.chips.club.disabled = me === null;
     const n = pl.shown.length + (me === null ? 0 : 1);
     this.count.textContent = `${n} av max ${pl.max || 8}`;
+    setDone(this.n1, has); setDone(this.n2, has && pl.me !== null); setDone(this.n3, has && n > 0);
     // Listan
     const lk = `${pl.id}|${me}|${pl.shown.join(",")}|${pl.consent}`;
     if (this.shownId !== lk) {
@@ -756,7 +766,7 @@ const SyncPage = {
       markedText: "Starten markerad vid {}", onMark: (t) => api("mark", {what: "hc", t})});
     this.ll = new Viewer({src: "ll", step: 2, title: "🗺 Livelox", icon: TRI, markText: "Starten är här",
       markedText: "Starten markerad vid {}", onMark: (t) => api("mark", {what: "ll", t})});
-    root.append(h("div", {class: "row grow"}, this.hc.el, this.ll.el));
+    root.append(h("div", {class: "row grow fit"}, this.hc.el, this.ll.el));
     this.shown = [null, null];
   },
   update() {
@@ -791,11 +801,11 @@ const PulsePage = {
     this.status = h("div", {class: "status"});
     const nudges = [["« 1 min", -60], ["« 10 s", -10], ["‹ 1 s", -1], ["1 s ›", 1], ["10 s »", 10], ["1 min »", 60]];
     const left = h("div", {class: "card"},
-      h("h2", {}, h("span", {class: "num"}, 1), h("span", {html: HEART_SVG(16, "#2a2a22")}), "Din puls från klockan", this.range),
+      h("h2", {}, this.n1 = num(1), h("span", {html: HEART_SVG(16, "#2a2a22")}), "Din puls från klockan", this.range),
       this.graph,
       h("div", {class: "timerow"}, this.time, this.bpm),
       h("div", {class: "nudge"}, nudges.map(([t, d]) => h("button", {class: "ghost", onclick: () => this.move(d)}, t))),
-      h("div", {class: "btnrow"}, h("span", {class: "num", style: "margin-top:14px"}, 2), this.markBtn),
+      h("div", {class: "btnrow"}, this.n2 = h("span", {class: "num", style: "margin-top:14px"}, 2), this.markBtn),
       this.status);
     this.hcImg = h("img", {alt: ""});
     this.hcTxt = h("p");
@@ -909,6 +919,7 @@ const PulsePage = {
       this.markBtn.className = "big marked"; this.markBtn.textContent = `✓ Starten markerad kl. ${clock(S.fitStart)}`;
       this.status.textContent = "Ändra genom att trycka igen";
     }
+    setDone(this.n1, S.fitStart !== null); setDone(this.n2, S.fitStart !== null);
   },
 };
 
@@ -925,7 +936,7 @@ const EndPage = {
     this.facts = h("p");
     this.skipT = h("h3"); this.skipP = h("p");
     this.all = h("button", {class: "ghost", style: "margin-top:10px", onclick: () => api("mark", {what: "end", t: null})}, "Ta med hela filmen");
-    root.append(h("div", {class: "row grow"}, this.v.el, h("div", {class: "panel"},
+    root.append(h("div", {class: "row grow fit"}, this.v.el, h("div", {class: "panel"},
       h("div", {class: "box"}, h("h3", {}, "Så blir videon"), this.facts),
       h("div", {class: "box"}, this.skipT, this.skipP, this.all))));
     this.shown = null;
@@ -984,12 +995,13 @@ const PreviewPage = {
     this.band = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     this.frame = h("div", {class: "frame"}, this.hcImg, this.llImg, this.band, this.llMsg, this.credit);
     this.stage = h("div", {class: "stage"}, this.frame);
-    this.range = h("input", {type: "range", min: 0, max: 1, step: "any", oninput: () => { paintRange(this.range); this._schedule(); }});
+    this.range = h("input", {type: "range", min: 0, max: 1, step: "any", oninput: () => {
+      paintRange(this.range); this._schedule(); setDone(this.n1, true); }});
     this.time = h("span", {class: "time"});
     this.sync = h("span", {class: "small", style: "margin:0"});
     const nudge = (label, dt) => h("button", {class: "ghost", onclick: () => api("nudge", {dt}).then(() => this.refresh())}, label);
     const left = h("div", {class: "card"},
-      h("h2", {}, h("span", {class: "num"}, 1), "Dra reglaget och kolla några ställen"),
+      h("h2", {}, this.n1 = num(1), "Dra reglaget och kolla några ställen"),
       this.stage, this.range,
       h("div", {class: "timerow"}, this.time,
         h("div", {class: "adj"}, "Kartan ligger efter", nudge("0,2 s", 0.2), nudge("1 s", 1),
@@ -1004,13 +1016,13 @@ const PreviewPage = {
     this.lw = h("input", {type: "range", step: 20, oninput: () => { paintRange(this.lw); this._width(); }});
     this.lwTxt = h("div", {class: "small"});
     const panel = h("div", {class: "panel"},
-      h("div", {class: "box"}, h("h3", {}, h("span", {class: "num"}, 2), "Titta på en provbit"),
+      h("div", {class: "box"}, h("h3", {}, this.n2 = num(2), "Titta på en provbit"),
         h("p", {}, `${S.previewSeconds} sekunder med ljud och rörelse.`), this.seg, this.prevBtn,
         h("div", {class: "small"}, "Öppnas i din vanliga videospelare."), this.panel.el),
       h("div", {class: "box"}, h("h3", {class: "muted"}, "Kartans bredd"), this.lw,
         h("div", {class: "ends"}, h("span", {}, "Större headcam"), h("span", {}, "Större karta")),
         this.lwTxt, h("a", {class: "textlink", onclick: () => { setRange(this.lw, 640); this._width(); }}, "Återställ")));
-    root.append(h("div", {class: "row grow"}, left, panel));
+    root.append(h("div", {class: "row grow fit"}, left, panel));
     this.hcL = new FrameLoader(this.hcImg, "hc", (m) => this._err(m));
     this.llL = new FrameLoader(this.llImg, "ll");
     this.lwMoving = 0;
@@ -1042,6 +1054,7 @@ const PreviewPage = {
     const busy = S.running;
     this.prevBtn.disabled = busy;
     this.panel.update();
+    setDone(this.n2, S.render.kind === "preview" && S.render.ok === true);
     this.layout();
     const pk = `${S.flip}|${S.pulse}|${S.placingOn}|${S.llSync}`;
     if (this._pk !== pk) { this._pk = pk; this.refresh(); }
@@ -1161,11 +1174,11 @@ const CreatePage = {
       h("button", {class: "big", onclick: () => api("open_output")}, "▶ Titta på videon"),
       h("button", {class: "big second", onclick: () => api("open_output", {folder: true})}, "Öppna mappen"));
     root.append(this.sum,
-      h("div", {class: "label"}, h("span", {class: "num"}, 1), "Välj kvalitet"),
+      h("div", {class: "label"}, this.n1 = num(1), "Välj kvalitet"),
       h("div", {class: "choices"}, this.choices.map((c) => c.el)),
-      h("div", {class: "label"}, h("span", {class: "num"}, 2), "Kontrollera var videon sparas"),
+      h("div", {class: "label"}, this.n2 = num(2), "Kontrollera var videon sparas"),
       h("div", {class: "saverow"}, this.path, h("button", {class: "ghost lg", onclick: () => api("pick_output")}, "Ändra…")),
-      h("div", {class: "makerow"}, h("span", {class: "num"}, 3), this.makeBtn),
+      h("div", {class: "makerow"}, this.n3 = num(3), this.makeBtn),
       this.panel.el, this.done);
   },
   show() { api("bench"); },
@@ -1189,6 +1202,7 @@ const CreatePage = {
     // När videon är klar är "Titta på videon" huvudknappen och Skapa videon tonas ner.
     this.makeBtn.className = finished ? "big second" : "big";
     this.done.hidden = !finished;
+    for (const n of [this.n1, this.n2, this.n3]) setDone(n, finished);
     this.panel.update();
   },
   hint() { return S.render.kind === "make" && S.render.ok === true ? "Videon är klar! Titta på den, eller ladda upp den på YouTube." : null; },
