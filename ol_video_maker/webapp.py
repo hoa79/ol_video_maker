@@ -268,7 +268,7 @@ class State:
         self.cancel = False
         self.proc: Optional[subprocess.Popen] = None
         self.render: Dict[str, Any] = {"kind": None, "text": "", "progress": 0.0, "ok": None,
-                                       "path": None, "error": None, "slept": 0, "seq": 0}
+                                       "path": None, "error": None, "slept": 0, "awake": False, "seq": 0}
         self.current_output = ""
         # Villkoren (ansvarsfriskrivningen) måste godkännas innan programmet används.
         self.terms_accepted = villkor.is_accepted()
@@ -718,7 +718,7 @@ class State:
             self.cancel = False
             self.current_output = job.output_file
             self.render = {"kind": kind, "text": text, "progress": 0.0, "ok": None, "path": None,
-                           "error": None, "slept": 0, "seq": self.render["seq"] + 1}
+                           "error": None, "slept": 0, "awake": False, "seq": self.render["seq"] + 1}
 
         meter = vila.SleepMeter()
 
@@ -731,7 +731,8 @@ class State:
             try:
                 # Datorn får inte somna medan videon skapas (skärmen får släckas). Måste
                 # börja och sluta i samma tråd som gör jobbet.
-                with vila.keep_awake():
+                with vila.keep_awake() as awake:
+                    self.render["awake"] = awake  # visas som en rad i steg 5
                     path = render(job, progress=progress, cancel_flag=lambda: self.cancel,
                                   on_process=lambda p: setattr(self, "proc", p))
             except VideoMakerError as e:

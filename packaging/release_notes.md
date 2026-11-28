@@ -8,6 +8,8 @@
    behöver inte provkoda varje gång.
 5. **Tydligare steg:** siffran vid ett kort eller en knapp blir en grön bock när den delen
    är klar, och reglagen i steg 2, 3 och 4 sitter direkt under filmbilden.
+6. **Datorn somnar inte:** medan videon skapas hålls datorn vaken, och en lång vila
+   avbryter inte längre videon.
 
 ## Så kommer du igång
 
