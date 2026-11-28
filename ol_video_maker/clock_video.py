@@ -1,7 +1,8 @@
 """Tid sedan start i videon (design B "I fältet ovanför filmen").
 
 Ett stoppur och en stor tid står uppe till vänster i det svarta fältet ovanför headcam-filmen,
-med en liten rad ovanför tiden ("SEDAN START" eller "I MÅL"). Klockan täcker varken filmen,
+med en grå etikett direkt efter siffrorna på samma baslinje ("sedan start" eller "i mål").
+Etikettens plats räknas ur typsnittets teckenbredder (fontwidth.py). Klockan täcker varken filmen,
 kartan eller fältet under videon, och den fungerar med alla val under videon.
 
 - Före starten står klockan på grå 0:00.
@@ -24,20 +25,25 @@ import os
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
+from .fontwidth import text_width
+
 WHITE = "white"
 GREY = "0x8a8a8a"
 LABEL = "0xa8a8a8"
 GREEN = "0x38d26b"
 
 # Geometri i Full HD-pixlar (skalas med k i 4K). Fältet ovanför en 16:9-film är 180 px högt.
-ICON_X, ICON_Y, ICON_SIZE = 40, 66, 80
-TEXT_X = 136
-LABEL_Y, LABEL_SIZE = 30, 24
-TIME_Y, TIME_SIZE = 62, 96
+BASELINE = 132               # siffrornas och etikettens baslinje
+TIME_SIZE = 96
+TEXT_X = 128
+ICON_X, ICON_SIZE = 40, 76
+ICON_Y = BASELINE - 35 - ICON_SIZE // 2   # centrerat mot siffrornas höjd (ca 0,73 em)
+LABEL_SIZE = 26
+LABEL_GAP = 22               # mellanrum mellan siffrorna och etiketten
 
-LABEL_RUNNING = "SEDAN START"
-LABEL_FINISH = "I MÅL"
-LABEL_OFFICIAL = "I MÅL · OFFICIELL TID FRÅN LIVELOX"
+LABEL_RUNNING = "sedan start"
+LABEL_FINISH = "i mål"
+LABEL_OFFICIAL = "i mål · officiell tid från Livelox"
 
 
 @dataclass
@@ -162,38 +168,40 @@ def build_clock(track: ClockTrack, tmpdir: str, k: int, start: float, duration: 
     rate = track.rate()
     end = duration + 1.0
 
-    # (från, till, text, färg, expansion, rad ovanför)
-    parts: List[Tuple[float, float, str, str, bool, str]] = []
+    # (från, till, text, färg, expansion, etikett, provtext för bredden)
+    parts: List[Tuple[float, float, str, str, bool, str, str]] = []
     if t_start > 0:
-        parts.append((0.0, t_start, "0:00", GREY, False, LABEL_RUNNING))
+        parts.append((0.0, t_start, "0:00", GREY, False, LABEL_RUNNING, "0:00"))
     run_end = min(end, t_stop) if t_stop is not None else end
-    if run_end > max(0.0, t_start):
-        # En timme in i loppet byter klockan från m:ss till h:mm:ss.
-        t_hour = t_start + 3600.0 / rate
-        if t_hour < run_end:
-            parts.append((max(0.0, t_start), t_hour, _running_text(t_start, rate, False),
-                          WHITE, True, LABEL_RUNNING))
-            parts.append((t_hour, run_end, _running_text(t_start, rate, True), WHITE, True,
-                          LABEL_RUNNING))
-        else:
-            parts.append((max(0.0, t_start), run_end, _running_text(t_start, rate, False),
-                          WHITE, True, LABEL_RUNNING))
+    a = max(0.0, t_start)
+    # Siffrorna blir bredare vid 10 minuter (m:ss -> mm:ss) och en timme (h:mm:ss), så
+    # etiketten flyttas där.
+    for e_to, hours, sample in ((600.0, False, "0:00"), (3600.0, False, "00:00"),
+                                (None, True, "0:00:00")):
+        b = run_end if e_to is None else min(run_end, t_start + e_to / rate)
+        if b > a:
+            parts.append((a, b, _running_text(t_start, rate, hours), WHITE, True,
+                          LABEL_RUNNING, sample))
+            a = b
     if t_stop is not None and t_stop < end:
-        parts.append((max(0.0, t_stop), end, fmt_clock(track.final_time()), GREEN, False,
-                      LABEL_OFFICIAL if track.official else LABEL_FINISH))
+        final = fmt_clock(track.final_time())
+        parts.append((max(0.0, t_stop), end, final, GREEN, False,
+                      LABEL_OFFICIAL if track.official else LABEL_FINISH, final))
 
     ov = f"[clkin];[clkin][clk]overlay=x={ICON_X * k}:y={ICON_Y * k}:shortest=0:eof_action=repeat"
     if not bold:
         return Clock(inputs=["-i", icon], chains=chains, overlays=ov, files=[icon])
     fb, fr = escape(bold), escape(font or bold)
-    for a, b, text, color, expand, label in parts:
+    base = BASELINE * k
+    for a, b, text, color, expand, label, sample in parts:
         if b <= a:
             continue
         en = f"between(t\\,{a:.3f}\\,{b - 0.0005:.3f})"
+        lx = TEXT_X + text_width(bold, sample, TIME_SIZE) + LABEL_GAP
         ov += (f",drawtext=fontfile='{fb}':text='{escape(text)}'"
                f":expansion={'normal' if expand else 'none'}:fontsize={TIME_SIZE * k}"
-               f":fontcolor={color}:x={TEXT_X * k}:y={TIME_Y * k}:enable='{en}'")
+               f":fontcolor={color}:x={TEXT_X * k}:y={base}-max_glyph_a:enable='{en}'")
         ov += (f",drawtext=fontfile='{fr}':text='{escape(label)}':expansion=none"
-               f":fontsize={LABEL_SIZE * k}:fontcolor={LABEL}:x={(TEXT_X + 4) * k}"
-               f":y={LABEL_Y * k}:enable='{en}'")
+               f":fontsize={LABEL_SIZE * k}:fontcolor={LABEL}:x={int(round(lx * k))}"
+               f":y={base}-max_glyph_a:enable='{en}'")
     return Clock(inputs=["-i", icon], chains=chains, overlays=ov, files=[icon])

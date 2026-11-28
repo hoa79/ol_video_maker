@@ -59,8 +59,8 @@ class ClockFilterTest(unittest.TestCase):
             self.assertIn("0\\:00", ov)                 # grå före starten
             self.assertIn("eif", ov)                    # räknar upp
             self.assertIn("1\\:01\\:40", ov)            # officiell tid i mål
-            self.assertIn("OFFICIELL TID FRÅN LIVELOX", ov)
-            self.assertEqual(ov.count("fontsize=96"), 4)  # före, m:ss, h:mm:ss, mål
+            self.assertIn("officiell tid från Livelox", ov)
+            self.assertEqual(ov.count("fontsize=96"), 5)  # före, m:ss, mm:ss, h:mm:ss, mål
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -83,7 +83,7 @@ class ClockRenderTest(unittest.TestCase):
                   clock=ClockTrack(race_start=1.0, finish=4.0))
         render(job)
         # Stoppuret (grått) ritas i fältet ovanför filmen; filmen själv är svart.
-        r, g, b = pixel(out, 2.0, 52, 112)  # ringens vänstra kant
+        r, g, b = pixel(out, 2.0, 52, 102)  # ringens vänstra kant
         self.assertGreater(r, 80)
         # Grön sluttid efter målgången (någon grön pixel i tiden).
         greens = [pixel(out, 4.5, x, 120) for x in range(140, 380, 6)]
@@ -131,3 +131,15 @@ class ClockStateTest(unittest.TestCase):
         self.assertAlmostEqual(self.st.video_length(), 605.0 - 95.0)
         self.st.end_time = 998.0                    # aldrig längre än filmen
         self.assertEqual(self.st.make_job("ut.mp4").end_time, 1000.0)
+
+
+class FontWidthTest(unittest.TestCase):
+    def test_width(self):
+        from ol_video_maker.core import find_font
+        from ol_video_maker.fontwidth import text_width
+        self.assertAlmostEqual(text_width(None, "abc", 10), 18.0)   # uppskattning
+        font = find_font(True)
+        if font:
+            w4, w5 = text_width(font, "0:00", 96), text_width(font, "00:00", 96)
+            self.assertGreater(w4, 100)
+            self.assertGreater(w5, w4)
