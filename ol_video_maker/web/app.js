@@ -493,7 +493,7 @@ const HEART_SVG = (size, color = "#e8344e") =>
 
 // --- 1. Välj filmer ---
 const FilesPage = {
-  number: 1, title: "Välj dina filmer", nextStep: 4, tip: "Klart! Tryck på Nästa.",
+  number: 1, title: "Välj dina filmer", nextStep: 5, tip: "Klart! Tryck på Nästa.",
   lead: "Välj filmen från din headcam och filmen du spelade in från Livelox. Du kan också välja vad som visas under filmen.",
   ready() {
     if (!S.hc) return "Välj din headcam-film för att gå vidare.";
@@ -561,7 +561,16 @@ const FilesPage = {
         opt("terrain", "⛰️", "Höjd och fart", ".fit-fil från klockan"),
         opt("placing", "🏃", "Placering", "Sträcktider från Livelox")),
       p.pulse, p.placing);
-    root.append(row, under);
+    // 4. Tid sedan start (frivilligt): en klocka ovanför filmen, oberoende av valet ovan.
+    this.clockBox = h("input", {type: "checkbox", onchange: () => api("set_clock", {on: this.clockBox.checked})});
+    // Kompakt, en rad, så att kortet syns utan att man behöver rulla på små skärmar.
+    const clockCard = h("div", {class: "card undercard clockcard"},
+      h("h2", {}, this.clockNum = num(4), "⏱ Tid sedan start ", h("span", {class: "tag"}, "Frivilligt")),
+      h("label", {class: "clockbox"}, this.clockBox,
+        h("span", {}, h("b", {}, "Visa en klocka ovanför filmen"),
+          h("small", {}, "Räknar från starten och stannar vid målgång. Med inklistrade " +
+            "sträcktider visas din officiella tid i mål."))));
+    root.append(row, under, clockCard);
     this.shown = {};
   },
   update() {
@@ -642,6 +651,9 @@ const FilesPage = {
       p.pbtn.textContent = "Klistra in sträcktider…";
     }
     p.remove.hidden = !hr;
+    this.clockBox.checked = !!S.clockOn;
+    this.clockBox.disabled = S.running;
+    setDone(this.clockNum, S.clockOn);
     setDone(p.num, (S.under === "pulse" && hr) || (S.under === "terrain" && ter) ||
       (S.under === "placing" && pl && pl.runners.length));
   },
@@ -1336,6 +1348,7 @@ const CreatePage = {
     if (S.pulse) vals.push(["Under videon", "♥ Puls"]);
     if (S.placingOn) vals.push(["Under videon", "🏃 Placering"]);
     if (S.terrainOn) vals.push(["Under videon", "⛰️ Höjd och fart"]);
+    if (S.clockOn) vals.push(["Ovanför filmen", "⏱ Tid sedan start"]);
     this.sum.innerHTML = vals.map(([l, v]) => `<div>${l}<b>${esc(v)}</b></div>`).join("");
     const fast = S.fast4k && S.canFast;
     for (const c of this.choices) {

@@ -141,7 +141,12 @@ Du kan alltid klicka på **Tillbaka** och ändra.
         behöver ha haft GPS på under loppet.
       - **Placering:** Du klistrar in sträcktiderna från Livelox på nästa sida (se
         **Visa placeringen under loppet** nedan).
-   4. Klicka på **Nästa**.
+   4. **Tid sedan start (frivilligt):** Rutan **Visa en klocka ovanför filmen** är ikryssad
+      från början. Klockan står uppe till vänster ovanför headcam-bilden. Den räknar från
+      starten du markerar i steg 2 och blir grön och stannar vid målgången i steg 3. Har du
+      klistrat in sträcktider och valt dig själv visar den din officiella tid i mål. Vill du
+      inte ha någon klocka, ta bort krysset.
+   5. Klicka på **Nästa**.
 4. **Steg 2, Synka starten:** Nu ser du båda filmerna bredvid varandra.
    1. Är headcam-bilden upp och ner? Kryssa i **Vänd bilden**. Bilden vänds
       då också i den färdiga videon.

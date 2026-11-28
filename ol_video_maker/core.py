@@ -33,6 +33,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from .placing_video import PlacingTrack
     from .pulse_video import PulseTrack
     from .terrain_video import TerrainTrack
+    from .clock_video import ClockTrack
 
 OUT_W = 1920
 OUT_H = 1080
@@ -459,6 +460,7 @@ class Job:
     pulse: Optional["PulseTrack"] = None  # puls från klockan (frivilligt), se pulse_video.py
     placing: Optional["PlacingTrack"] = None  # placeringslinjen (frivilligt), placing_video.py
     terrain: Optional["TerrainTrack"] = None  # höjd och fart (frivilligt), terrain_video.py
+    clock: Optional["ClockTrack"] = None  # tid sedan start ovanför filmen (frivilligt), clock_video.py
     # Bildfrekvens i videon, t.ex. "30000/1001". None = samma som kameran. Färre bilder per
     # sekund i 4K gör videon klart snabbare att skapa (se half_fps).
     fps: Optional[str] = None
@@ -494,6 +496,7 @@ class Plan:
     pulse_drawn: bool = False
     placing_drawn: bool = False
     terrain_drawn: bool = False
+    clock_drawn: bool = False
 
 
 def _even(x: float) -> int:
@@ -622,6 +625,16 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
         tband = build_terrain(job.terrain, tmpdir, k, hc_box_w, H, start, duration, first,
                               (font, bold_font), _escape_filter_value, fps=out_fps)
         cmd += tband.inputs
+    clock = None
+    if job.clock is not None:
+        from .clock_video import build_clock
+        if tmpdir is None:
+            tmpdir = tempfile.mkdtemp(prefix="olvm_klocka_")
+            temp_files.append(tmpdir)
+        # Varje input har precis ett "-i", så nästa inputs nummer är antalet hittills.
+        clock = build_clock(job.clock, tmpdir, k, start, duration, cmd.count("-i"),
+                            (font, bold_font), _escape_filter_value, fps=out_fps)
+        cmd += clock.inputs
 
     chains: List[str] = []
     if n_hc == 1:
@@ -724,6 +737,11 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
         overlay += tband.overlays
         chains += tband.chains
         terrain_drawn = True
+    clock_drawn = False
+    if clock is not None:
+        overlay += clock.overlays
+        chains += clock.chains
+        clock_drawn = True
     overlay += ",format=yuv420p[v]"
     filtergraph = ";".join(chains + [hc_chain, ll_chain, overlay])
 
@@ -741,7 +759,8 @@ def build_plan(job: Job, headcam_infos: Sequence[MediaInfo], livelox_info: Media
     ]
     return Plan(cmd=cmd, duration=duration, encoder=encoder, hwaccel=hwaccel,
                 temp_files=temp_files, credit_drawn=credit_drawn, pulse_drawn=pulse_drawn,
-                placing_drawn=placing_drawn, terrain_drawn=terrain_drawn)
+                placing_drawn=placing_drawn, terrain_drawn=terrain_drawn,
+                clock_drawn=clock_drawn)
 
 
 # ---------------------------------------------------------------------------
